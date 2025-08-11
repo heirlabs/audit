@@ -6,11 +6,9 @@ use anchor_spl::{
 };
 use anchor_lang::prelude::InterfaceAccount;
 
-pub mod randomness;
-use randomness::*;
-
-pub mod vrf;
-use vrf::*;
+// Old VRF modules removed - using randomness_v2 only
+pub mod randomness_v2;
+use randomness_v2::*;
 
 declare_id!("DB9Zvhdp5xh853d2Tr2HBkRDDaCSioD7vwchhcGaXCw3");
 
@@ -199,36 +197,23 @@ pub mod defai_swap {
         Ok(())
     }
     
-    pub fn initialize_vrf_state(ctx: Context<InitializeVrf>, vrf_account: Pubkey) -> Result<()> {
-        vrf::initialize_vrf(ctx, vrf_account)?;
-        Ok(())
+    // Old VRF functions removed - use randomness_v2 functions instead
+
+    // New Switchboard On-Demand Randomness Instructions
+    pub fn initialize_randomness_v2(ctx: Context<InitializeRandomness>) -> Result<()> {
+        randomness_v2::initialize_randomness(ctx)
     }
-    
-    pub fn enable_vrf(ctx: Context<UpdateConfig>) -> Result<()> {
-        require_keys_eq!(ctx.accounts.admin.key(), ctx.accounts.config.admin, ErrorCode::Unauthorized);
-        require!(!ctx.accounts.config.vrf_enabled, ErrorCode::VrfAlreadyEnabled);
-        
-        let cfg = &mut ctx.accounts.config;
-        cfg.vrf_enabled = true;
-        
-        msg!("VRF enabled for swap program");
-        
-        // Emit admin action event
-        emit!(AdminAction {
-            admin: ctx.accounts.admin.key(),
-            action: "Enable VRF".to_string(),
-            timestamp: Clock::get()?.unix_timestamp,
-        });
-        
-        Ok(())
+
+    pub fn commit_randomness_v2(ctx: Context<CommitRandomness>) -> Result<()> {
+        randomness_v2::commit_randomness(ctx)
     }
-    
-    pub fn request_vrf_randomness(ctx: Context<RequestRandomness>) -> Result<()> {
-        vrf::request_randomness(ctx)
+
+    pub fn reveal_randomness_v2(ctx: Context<RevealRandomness>) -> Result<()> {
+        randomness_v2::reveal_randomness(ctx)
     }
-    
-    pub fn consume_vrf_randomness(ctx: Context<ConsumeRandomness>) -> Result<()> {
-        vrf::consume_randomness(ctx)
+
+    pub fn generate_simple_randomness(ctx: Context<SimpleRandomness>) -> Result<()> {
+        randomness_v2::generate_simple_randomness(ctx)
     }
 
     pub fn initialize_user_tax(ctx: Context<InitializeUserTax>) -> Result<()> {
@@ -349,9 +334,9 @@ pub mod defai_swap {
         // Generate random bonus using secure randomness / VRF when enabled
         let (min_bonus, max_bonus) = get_tier_bonus_range(0);
         let random_value = if ctx.accounts.config.vrf_enabled {
-            require!(ctx.accounts.vrf_state.result_buffer != [0u8; 32], ErrorCode::VrfNotReady);
+            require!(!ctx.accounts.randomness_state.is_pending && ctx.accounts.randomness_state.revealed_value != [0u8; 32], ErrorCode::RandomnessNotReady);
             generate_vrf_random(
-                &ctx.accounts.vrf_state.result_buffer,
+                &ctx.accounts.randomness_state.revealed_value,
                 &ctx.accounts.user.key(),
                 &ctx.accounts.nft_mint.key(),
             )
@@ -480,9 +465,9 @@ pub mod defai_swap {
         // Generate random bonus using VRF when enabled; otherwise fallback
         let (min_bonus, max_bonus) = get_tier_bonus_range(tier);
         let random_value = if ctx.accounts.config.vrf_enabled {
-            require!(ctx.accounts.vrf_state.result_buffer != [0u8; 32], ErrorCode::VrfNotReady);
+            require!(!ctx.accounts.randomness_state.is_pending && ctx.accounts.randomness_state.revealed_value != [0u8; 32], ErrorCode::RandomnessNotReady);
             generate_vrf_random(
-                &ctx.accounts.vrf_state.result_buffer,
+                &ctx.accounts.randomness_state.revealed_value,
                 &ctx.accounts.user.key(),
                 &ctx.accounts.nft_mint.key(),
             )
@@ -593,9 +578,9 @@ pub mod defai_swap {
         // Generate random bonus using VRF when enabled; otherwise fallback
         let (min_bonus, max_bonus) = get_tier_bonus_range(tier);
         let random_value = if ctx.accounts.config.vrf_enabled {
-            require!(ctx.accounts.vrf_state.result_buffer != [0u8; 32], ErrorCode::VrfNotReady);
+            require!(!ctx.accounts.randomness_state.is_pending && ctx.accounts.randomness_state.revealed_value != [0u8; 32], ErrorCode::RandomnessNotReady);
             generate_vrf_random(
-                &ctx.accounts.vrf_state.result_buffer,
+                &ctx.accounts.randomness_state.revealed_value,
                 &ctx.accounts.user.key(),
                 &ctx.accounts.nft_mint.key(),
             )
@@ -1036,9 +1021,9 @@ pub mod defai_swap {
         
         // Use VRF randomness when enabled; otherwise fallback
         let random_value = if ctx.accounts.config.vrf_enabled {
-            require!(ctx.accounts.vrf_state.result_buffer != [0u8; 32], ErrorCode::VrfNotReady);
+            require!(!ctx.accounts.randomness_state.is_pending && ctx.accounts.randomness_state.revealed_value != [0u8; 32], ErrorCode::RandomnessNotReady);
             generate_vrf_random(
-                &ctx.accounts.vrf_state.result_buffer,
+                &ctx.accounts.randomness_state.revealed_value,
                 &ctx.accounts.user.key(),
                 &ctx.accounts.nft_mint.key(),
             )
@@ -1319,10 +1304,10 @@ pub struct SwapOgTier0ForPnftV6<'info> {
     pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
-        seeds = [b"vrf_state"],
-        bump = vrf_state.bump
+        seeds = [b"randomness_state"],
+        bump = randomness_state.bump
     )]
-    pub vrf_state: Box<Account<'info, VrfState>>,
+    pub randomness_state: Box<Account<'info, RandomnessState>>,
     #[account(mut)]
     pub collection_config: Box<Account<'info, CollectionConfig>>,
     /// CHECK: NFT mint to be created
@@ -1373,10 +1358,10 @@ pub struct SwapDefaiForPnftV6<'info> {
     pub user_defai_ata: Box<InterfaceAccount<'info, TokenAccount2022>>,
     #[account(
         mut,
-        seeds = [b"vrf_state"],
-        bump = vrf_state.bump
+        seeds = [b"randomness_state"],
+        bump = randomness_state.bump
     )]
-    pub vrf_state: Account<'info, VrfState>,
+    pub randomness_state: Account<'info, RandomnessState>,
     #[account(
         mut,
         // Validate treasury ATA matches the configured treasury
@@ -1458,10 +1443,10 @@ pub struct SwapOldDefaiForPnftV6<'info> {
     pub escrow_old: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
-        seeds = [b"vrf_state"],
-        bump = vrf_state.bump
+        seeds = [b"randomness_state"],
+        bump = randomness_state.bump
     )]
-    pub vrf_state: Account<'info, VrfState>,
+    pub randomness_state: Account<'info, RandomnessState>,
     pub config: Account<'info, Config>,
     #[account(mut)]
     pub collection_config: Box<Account<'info, CollectionConfig>>,
@@ -1671,10 +1656,10 @@ pub struct RerollBonusV6<'info> {
     pub system_program: Program<'info, System>,
     #[account(
         mut,
-        seeds = [b"vrf_state"],
-        bump = vrf_state.bump
+        seeds = [b"randomness_state"],
+        bump = randomness_state.bump
     )]
-    pub vrf_state: Account<'info, VrfState>,
+    pub randomness_state: Account<'info, RandomnessState>,
     /// CHECK: Sysvar for recent blockhashes
     #[account(address = solana_program::sysvar::recent_blockhashes::ID)]
     pub recent_blockhashes: AccountInfo<'info>,
@@ -1977,10 +1962,8 @@ pub enum ErrorCode {
     OgTier0AlreadyClaimed,
     #[msg("Invalid NFT - NFT mint does not match")]
     InvalidNft,
-    #[msg("VRF is already enabled")]
-    VrfAlreadyEnabled,
-    #[msg("VRF result not ready")]
-    VrfNotReady,
+    #[msg("Randomness not ready - generate randomness first")]
+    RandomnessNotReady,
 }
 
 // ===== Events =====

@@ -9,10 +9,10 @@ defai_estate = "DYXXvied9wwpDaE1NcVS56BfeQ4ZxXozft7FCLNVUG41"
 defai_app_factory = "7NF6yiQeRbNpYZJzgdijQErD1WYh9mUxwN5SBDpSA6dX"
 
 [programs.devnet]
-defai_swap = "DB9Zvhdp5xh853d2Tr2HBkRDDaCSioD7vwchhcGaXCw3"
-defai_staking = "2TLhCW35y5jcuoKtfwTx7H5EPMqUtCf3UQhYKdKKg3Hq"
-defai_estate = "DYXXvied9wwpDaE1NcVS56BfeQ4ZxXozft7FCLNVUG41"
-defai_app_factory = "7NF6yiQeRbNpYZJzgdijQErD1WYh9mUxwN5SBDpSA6dX"
+defai_swap = "EMwWSFW7rxS3Jh3CAsGYNwiYX6myucnFqFxTezBtaEvy"
+defai_staking = "3f1FBXvybT9m6ppRkqPyQBQ318KrC2fU3NHVUtnfNJyv"
+defai_estate = "BUUhKqR35SGMgE9KALrYHTsCuNGGQcce8h54sfGGUGm1"
+defai_app_factory = "62javQ376d4hShFrQQfts6kvEBzHKmSWSxPA3xyxxmLM"
 
 [registry]
 url = "https://api.apr.dev"
