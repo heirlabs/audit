@@ -1316,13 +1316,13 @@ pub struct InitializeCollection<'info> {
 pub struct SwapOgTier0ForPnftV6<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         seeds = [b"vrf_state"],
         bump = vrf_state.bump
     )]
-    pub vrf_state: Account<'info, VrfState>,
+    pub vrf_state: Box<Account<'info, VrfState>>,
     #[account(mut)]
     pub collection_config: Box<Account<'info, CollectionConfig>>,
     /// CHECK: NFT mint to be created
@@ -1349,7 +1349,7 @@ pub struct SwapOgTier0ForPnftV6<'info> {
         seeds = [b"escrow"],
         bump
     )]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
     #[account(
         init_if_needed,
         payer = user,

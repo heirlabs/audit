@@ -105,7 +105,12 @@ pub struct ConsumeRandomness<'info> {
 
 use anchor_spl::token::Token;
 use anchor_lang::solana_program::{instruction::AccountMeta, instruction::Instruction, program::invoke_signed};
-use switchboard_solana::SWITCHBOARD_PROGRAM_ID;
+
+// Switchboard program ID constant to avoid long symbol names
+pub const SWITCHBOARD_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
+    45, 191, 211, 253, 220, 54, 156, 186, 192, 46, 10, 172, 25, 91, 51, 46,
+    200, 36, 75, 90, 105, 231, 7, 95, 204, 83, 82, 6, 87, 214, 143, 138
+]);
 
 pub fn initialize_vrf(ctx: Context<InitializeVrf>, vrf_account: Pubkey) -> Result<()> {
     let vrf_state = &mut ctx.accounts.vrf_state;
@@ -128,8 +133,8 @@ pub fn request_randomness(ctx: Context<RequestRandomness>) -> Result<()> {
     // Admin-gated configuration on first request, and strict validation thereafter
     require_keys_eq!(ctx.accounts.authority.key(), ctx.accounts.config.admin, crate::ErrorCode::Unauthorized);
     // Enforce Switchboard program id / VRF owner
-    require_keys_eq!(*ctx.accounts.switchboard_program.key, *SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
-    require_keys_eq!(*ctx.accounts.vrf.owner, *SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
+    require_keys_eq!(*ctx.accounts.switchboard_program.key, SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
+    require_keys_eq!(*ctx.accounts.vrf.owner, SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
     
     let vrf_state = &mut ctx.accounts.vrf_state;
     // Bootstrap config if not set; otherwise enforce exact match
@@ -174,7 +179,7 @@ pub fn request_randomness(ctx: Context<RequestRandomness>) -> Result<()> {
     data.extend_from_slice(&[0]);
 
     let ix = Instruction {
-        program_id: *SWITCHBOARD_PROGRAM_ID,
+        program_id: SWITCHBOARD_PROGRAM_ID,
         accounts,
         data,
     };
@@ -207,7 +212,7 @@ pub fn consume_randomness(ctx: Context<ConsumeRandomness>) -> Result<()> {
     let vrf_state = &mut ctx.accounts.vrf_state;
     let clock = Clock::get()?;
     // Enforce Switchboard VRF owner
-    require_keys_eq!(*ctx.accounts.vrf.owner, *SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
+    require_keys_eq!(*ctx.accounts.vrf.owner, SWITCHBOARD_PROGRAM_ID, VrfError::InvalidVrfAccount);
 
     // Parse VRF Lite account and write exact 32-byte result
     // Manually parse via docs: discriminator + packed struct

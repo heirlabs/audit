@@ -20,4 +20,3 @@ default = []
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
 solana-program = { workspace = true }
-switchboard-solana = { version = "0.30.4", features = ["cpi"] }

@@ -1,0 +1,8 @@
+[target.bpfel-unknown-unknown]
+rustflags = [
+    "-C", "link-arg=-z",
+    "-C", "link-arg=max-page-size=0x1000",
+]
+
+[build]
+target = "bpfel-unknown-unknown"
