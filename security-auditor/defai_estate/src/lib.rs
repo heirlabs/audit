@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_lang::accounts::interface_account::InterfaceAccount;
+use anchor_lang::accounts::interface::Interface;
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token_interface::{TokenInterface, Mint as MintInterface, TokenAccount as TokenAccountInterface};
 use anchor_spl::associated_token::AssociatedToken;
 
 declare_id!("3WN7Eiq5pCGdoCXJW4jf8NygqPv8FzTvwXZArHtYFKYV");
@@ -1725,7 +1728,7 @@ pub struct ContributeToTrading<'info> {
         token::mint = token_mint,
         token::authority = contributor,
     )]
-    pub contributor_token_account: Account<'info, TokenAccount>,
+    pub contributor_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     #[account(
         mut,
@@ -1738,10 +1741,10 @@ pub struct ContributeToTrading<'info> {
         ],
         bump,
     )]
-    pub estate_vault: Account<'info, TokenAccount>,
+    pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
     
-    pub token_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -1767,9 +1770,9 @@ pub struct InitEstateVault<'info> {
         ],
         bump,
     )]
-    pub estate_vault: Account<'info, TokenAccount>,
-    pub token_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+    pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
 
@@ -1820,16 +1823,16 @@ pub struct DistributeTradingProfits<'info> {
         token::mint = token_mint,
         token::authority = estate.owner,
     )]
-    pub human_token_account: Account<'info, TokenAccount>,
+    pub human_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     #[account(
         mut,
         token::mint = token_mint,
         token::authority = estate.ai_agent.unwrap(),
     )]
-    pub ai_token_account: Account<'info, TokenAccount>,
+    pub ai_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
-    pub token_mint: Account<'info, Mint>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -1880,9 +1883,9 @@ pub struct ExecuteTradingEmergencyWithdrawal<'info> {
         token::mint = token_mint,
         token::authority = owner,
     )]
-    pub human_token_account: Account<'info, TokenAccount>,
+    pub human_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
-    pub token_mint: Account<'info, Mint>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -1905,7 +1908,7 @@ pub struct DepositTokenToEstate<'info> {
         token::mint = token_mint,
         token::authority = depositor,
     )]
-    pub depositor_token_account: Account<'info, TokenAccount>,
+    pub depositor_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     #[account(
         mut,
         token::mint = token_mint,
@@ -1918,7 +1921,7 @@ pub struct DepositTokenToEstate<'info> {
         bump,
     )]
     pub estate_vault: Account<'info, TokenAccount>,
-    pub token_mint: Account<'info, Mint>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -2074,14 +2077,14 @@ pub struct ClaimToken<'info> {
     )]
     pub claim_record: Account<'info, ClaimRecord>,
     
-    pub token_mint: Account<'info, Mint>,
+    pub token_mint: InterfaceAccount<'info, MintInterface>,
     
     #[account(
         mut,
         associated_token::mint = token_mint,
         associated_token::authority = estate,
     )]
-    pub estate_token_account: Account<'info, TokenAccount>,
+    pub estate_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     #[account(
         init_if_needed,
@@ -2089,7 +2092,7 @@ pub struct ClaimToken<'info> {
         associated_token::mint = token_mint,
         associated_token::authority = beneficiary,
     )]
-    pub beneficiary_token_account: Account<'info, TokenAccount>,
+    pub beneficiary_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -2114,14 +2117,14 @@ pub struct ClaimNFT<'info> {
     )]
     pub claim_record: Account<'info, ClaimRecord>,
     
-    pub nft_mint: Account<'info, Mint>,
+    pub nft_mint: InterfaceAccount<'info, MintInterface>,
     
     #[account(
         mut,
         associated_token::mint = nft_mint,
         associated_token::authority = estate,
     )]
-    pub estate_nft_account: Account<'info, TokenAccount>,
+    pub estate_nft_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     #[account(
         init_if_needed,
@@ -2129,7 +2132,7 @@ pub struct ClaimNFT<'info> {
         associated_token::mint = nft_mint,
         associated_token::authority = beneficiary,
     )]
-    pub beneficiary_nft_account: Account<'info, TokenAccount>,
+    pub beneficiary_nft_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
