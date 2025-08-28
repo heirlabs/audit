@@ -407,6 +407,24 @@ pub mod defai_estate {
         ctx: Context<ContributeToTrading>,
         amount: u64,
     ) -> Result<()> {
+        // Validate token account constraints
+        require!(
+            ctx.accounts.contributor_token_account.mint == ctx.accounts.token_mint.key(),
+            EstateError::InvalidTokenMint
+        );
+        require!(
+            ctx.accounts.contributor_token_account.owner == ctx.accounts.contributor.key(),
+            EstateError::InvalidTokenOwner
+        );
+        require!(
+            ctx.accounts.estate_vault.mint == ctx.accounts.token_mint.key(),
+            EstateError::InvalidTokenMint
+        );
+        require!(
+            ctx.accounts.estate_vault.owner == ctx.accounts.estate.key(),
+            EstateError::InvalidTokenOwner
+        );
+        
         let estate = &mut ctx.accounts.estate;
         
         require!(estate.trading_enabled, EstateError::TradingNotEnabled);
@@ -463,6 +481,23 @@ pub mod defai_estate {
 
     // Helper to deposit tokens into the estate vault for a given mint
     pub fn deposit_token_to_estate(ctx: Context<DepositTokenToEstate>, amount: u64) -> Result<()> {
+        // Validate token account constraints
+        require!(
+            ctx.accounts.depositor_token_account.mint == ctx.accounts.token_mint.key(),
+            EstateError::InvalidTokenMint
+        );
+        require!(
+            ctx.accounts.depositor_token_account.owner == ctx.accounts.depositor.key(),
+            EstateError::InvalidTokenOwner
+        );
+        require!(
+            ctx.accounts.estate_vault.mint == ctx.accounts.token_mint.key(),
+            EstateError::InvalidTokenMint
+        );
+        require!(
+            ctx.accounts.estate_vault.owner == ctx.accounts.estate.key(),
+            EstateError::InvalidTokenOwner
+        );
         let cpi_accounts = Transfer {
             from: ctx.accounts.depositor_token_account.to_account_info(),
             to: ctx.accounts.estate_vault.to_account_info(),
@@ -1723,17 +1758,11 @@ pub struct ContributeToTrading<'info> {
     )]
     pub estate: Account<'info, Estate>,
     
-    #[account(
-        mut,
-        token::mint = token_mint,
-        token::authority = contributor,
-    )]
+    #[account(mut)]
     pub contributor_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     #[account(
         mut,
-        token::mint = token_mint,
-        token::authority = estate,
         seeds = [
             ESTATE_VAULT_SEED,
             estate.key().as_ref(),
@@ -1761,14 +1790,15 @@ pub struct InitEstateVault<'info> {
     #[account(
         init,
         payer = owner,
-        token::mint = token_mint,
-        token::authority = estate,
         seeds = [
             ESTATE_VAULT_SEED,
             estate.key().as_ref(),
             token_mint.key().as_ref(),
         ],
         bump,
+        token::mint = token_mint,
+        token::authority = estate,
+        token::token_program = token_program,
     )]
     pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
     pub token_mint: InterfaceAccount<'info, MintInterface>,
@@ -1903,11 +1933,7 @@ pub struct DepositTokenToEstate<'info> {
         bump,
     )]
     pub estate: Account<'info, Estate>,
-    #[account(
-        mut,
-        token::mint = token_mint,
-        token::authority = depositor,
-    )]
+    #[account(mut)]
     pub depositor_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     #[account(
         mut,
@@ -2463,6 +2489,10 @@ pub enum EstateError {
     NFTAlreadyClaimed,
     #[msg("Invalid NFT amount - must be exactly 1")]
     InvalidNFTAmount,
+    #[msg("Invalid token mint")]
+    InvalidTokenMint,
+    #[msg("Invalid token owner")]
+    InvalidTokenOwner,
     #[msg("Recovery can only be initiated after 30 days of being claimable")]
     RecoveryTooEarly,
     #[msg("Recovery already executed")]
