@@ -396,9 +396,106 @@ pub mod defai_estate {
         
         Ok(())
     }
+    
+    pub fn pause_trading(ctx: Context<PauseTrading>) -> Result<()> {
+        let estate = &mut ctx.accounts.estate;
+        
+        require!(estate.trading_enabled, EstateError::TradingNotEnabled);
+        require!(!estate.is_locked, EstateError::EstateLocked);
+        require!(!estate.is_claimable, EstateError::EstateClaimable);
+        require!(
+            ctx.accounts.owner.key() == estate.owner,
+            EstateError::UnauthorizedAccess
+        );
+        
+        estate.trading_enabled = false;
+        estate.last_trading_update = Clock::get()?.unix_timestamp;
+        
+        msg!("Trading paused for Estate #{}", estate.estate_number);
+        
+        emit!(TradingPaused {
+            estate_id: estate.estate_id,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+        
+        Ok(())
+    }
+    
+    pub fn resume_trading(ctx: Context<ResumeTrading>) -> Result<()> {
+        let estate = &mut ctx.accounts.estate;
+        
+        require!(!estate.trading_enabled, EstateError::TradingAlreadyEnabled);
+        require!(!estate.is_locked, EstateError::EstateLocked);
+        require!(!estate.is_claimable, EstateError::EstateClaimable);
+        require!(
+            ctx.accounts.owner.key() == estate.owner,
+            EstateError::UnauthorizedAccess
+        );
+        require!(
+            estate.ai_agent.is_some(),
+            EstateError::TradingNotInitialized
+        );
+        
+        estate.trading_enabled = true;
+        estate.last_trading_update = Clock::get()?.unix_timestamp;
+        
+        msg!("Trading resumed for Estate #{}", estate.estate_number);
+        
+        emit!(TradingResumed {
+            estate_id: estate.estate_id,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+        
+        Ok(())
+    }
 
     // Initialize a per-estate SPL token vault for a given mint, owned by the estate PDA
     pub fn init_estate_vault(ctx: Context<InitEstateVault>) -> Result<()> {
+        use anchor_lang::system_program;
+        
+        // Get required account infos
+        let rent = Rent::get()?;
+        let space = TokenAccount::LEN;
+        let lamports = rent.minimum_balance(space);
+        
+        // Create the token account
+        let estate_key = ctx.accounts.estate.key();
+        let mint_key = ctx.accounts.token_mint.key();
+        let vault_seeds = &[
+            ESTATE_VAULT_SEED,
+            estate_key.as_ref(),
+            mint_key.as_ref(),
+            &[ctx.bumps.estate_vault],
+        ];
+        let signer = &[&vault_seeds[..]];
+        
+        // Create account
+        system_program::create_account(
+            CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::CreateAccount {
+                    from: ctx.accounts.owner.to_account_info(),
+                    to: ctx.accounts.estate_vault.to_account_info(),
+                },
+                signer,
+            ),
+            lamports,
+            space as u64,
+            ctx.accounts.token_program.key,
+        )?;
+        
+        // Initialize token account
+        let init_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token_interface::InitializeAccount3 {
+                account: ctx.accounts.estate_vault.to_account_info(),
+                mint: ctx.accounts.token_mint.to_account_info(),
+                authority: ctx.accounts.estate.to_account_info(),
+            },
+            signer,
+        );
+        anchor_spl::token_interface::initialize_account3(init_ctx)?;
+        
         msg!("Initialized estate vault for mint {}", ctx.accounts.token_mint.key());
         Ok(())
     }
@@ -973,37 +1070,6 @@ pub mod defai_estate {
 
     pub fn claim_inheritance(
         ctx: Context<ClaimInheritance>,
-        beneficiary_index: u8,
-    ) -> Result<()> {
-        let estate = &mut ctx.accounts.estate;
-        
-        require!(estate.is_claimable, EstateError::NotClaimable);
-        require!(
-            beneficiary_index < estate.total_beneficiaries,
-            EstateError::InvalidBeneficiaryIndex
-        );
-
-        let beneficiary = &mut estate.beneficiaries[beneficiary_index as usize];
-        
-        require!(
-            beneficiary.address == ctx.accounts.beneficiary.key(),
-            EstateError::UnauthorizedBeneficiary
-        );
-        require!(!beneficiary.claimed, EstateError::AlreadyClaimed);
-
-        beneficiary.claimed = true;
-
-        msg!(
-            "Beneficiary {} claimed {}% of estate",
-            beneficiary.address,
-            beneficiary.share_percentage
-        );
-
-        Ok(())
-    }
-
-    pub fn claim_inheritance_v2(
-        ctx: Context<ClaimInheritanceV2>,
         beneficiary_index: u8,
     ) -> Result<()> {
         // First, validate the estate state and get needed values
@@ -1748,6 +1814,30 @@ pub struct EnableTrading<'info> {
 }
 
 #[derive(Accounts)]
+pub struct PauseTrading<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        has_one = owner,
+    )]
+    pub estate: Account<'info, Estate>,
+}
+
+#[derive(Accounts)]
+pub struct ResumeTrading<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    
+    #[account(
+        mut,
+        has_one = owner,
+    )]
+    pub estate: Account<'info, Estate>,
+}
+
+#[derive(Accounts)]
 pub struct ContributeToTrading<'info> {
     #[account(mut)]
     pub contributor: Signer<'info>,
@@ -1787,20 +1877,17 @@ pub struct InitEstateVault<'info> {
         bump
     )]
     pub estate: Account<'info, Estate>,
+    /// CHECK: Will be initialized as token account via CPI
     #[account(
-        init,
-        payer = owner,
+        mut,
         seeds = [
             ESTATE_VAULT_SEED,
             estate.key().as_ref(),
             token_mint.key().as_ref(),
         ],
         bump,
-        token::mint = token_mint,
-        token::authority = estate,
-        token::token_program = token_program,
     )]
-    pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
+    pub estate_vault: UncheckedAccount<'info>,
     pub token_mint: InterfaceAccount<'info, MintInterface>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
@@ -1906,17 +1993,13 @@ pub struct ExecuteTradingEmergencyWithdrawal<'info> {
         ],
         bump,
     )]
-    pub estate_vault: Account<'info, TokenAccount>,
+    pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
     
-    #[account(
-        mut,
-        token::mint = token_mint,
-        token::authority = owner,
-    )]
+    #[account(mut)]
     pub human_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     
     pub token_mint: InterfaceAccount<'info, MintInterface>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -1937,8 +2020,6 @@ pub struct DepositTokenToEstate<'info> {
     pub depositor_token_account: InterfaceAccount<'info, TokenAccountInterface>,
     #[account(
         mut,
-        token::mint = token_mint,
-        token::authority = estate,
         seeds = [
             ESTATE_VAULT_SEED,
             estate.key().as_ref(),
@@ -1946,9 +2027,9 @@ pub struct DepositTokenToEstate<'info> {
         ],
         bump,
     )]
-    pub estate_vault: Account<'info, TokenAccount>,
+    pub estate_vault: InterfaceAccount<'info, TokenAccountInterface>,
     pub token_mint: InterfaceAccount<'info, MintInterface>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]
@@ -2041,15 +2122,6 @@ pub struct TriggerInheritance<'info> {
 
 #[derive(Accounts)]
 pub struct ClaimInheritance<'info> {
-    #[account(mut)]
-    pub beneficiary: Signer<'info>,
-    
-    #[account(mut)]
-    pub estate: Account<'info, Estate>,
-}
-
-#[derive(Accounts)]
-pub struct ClaimInheritanceV2<'info> {
     #[account(mut)]
     pub beneficiary: Signer<'info>,
     
@@ -2396,6 +2468,18 @@ pub struct TradingEnabled {
 }
 
 #[event]
+pub struct TradingPaused {
+    pub estate_id: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct TradingResumed {
+    pub estate_id: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
 pub struct TradingContribution {
     pub estate_id: Pubkey,
     pub contributor: Pubkey,
@@ -2493,6 +2577,8 @@ pub enum EstateError {
     InvalidTokenMint,
     #[msg("Invalid token owner")]
     InvalidTokenOwner,
+    #[msg("Trading not initialized - must enable trading first")]
+    TradingNotInitialized,
     #[msg("Recovery can only be initiated after 30 days of being claimable")]
     RecoveryTooEarly,
     #[msg("Recovery already executed")]
