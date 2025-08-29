@@ -5,7 +5,7 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use anchor_spl::token_interface::{TokenInterface, Mint as MintInterface, TokenAccount as TokenAccountInterface};
 use anchor_spl::associated_token::AssociatedToken;
 
-declare_id!("3WN7Eiq5pCGdoCXJW4jf8NygqPv8FzTvwXZArHtYFKYV");
+declare_id!("HvyyPrXbrhNEiGhttDUGMsYjKDPkYER2uFaLo7Bkei92");
 
 // Estate Seeds
 pub const ESTATE_SEED: &[u8] = b"estate";
@@ -577,34 +577,44 @@ pub mod defai_estate {
     }
 
     // Helper to deposit tokens into the estate vault for a given mint
-    pub fn deposit_token_to_estate(ctx: Context<DepositTokenToEstate>, amount: u64) -> Result<()> {
-        // Validate token account constraints
-        require!(
-            ctx.accounts.depositor_token_account.mint == ctx.accounts.token_mint.key(),
-            EstateError::InvalidTokenMint
-        );
-        require!(
-            ctx.accounts.depositor_token_account.owner == ctx.accounts.depositor.key(),
-            EstateError::InvalidTokenOwner
-        );
-        require!(
-            ctx.accounts.estate_vault.mint == ctx.accounts.token_mint.key(),
-            EstateError::InvalidTokenMint
-        );
-        require!(
-            ctx.accounts.estate_vault.owner == ctx.accounts.estate.key(),
-            EstateError::InvalidTokenOwner
-        );
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.depositor_token_account.to_account_info(),
-            to: ctx.accounts.estate_vault.to_account_info(),
-            authority: ctx.accounts.depositor.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        token::transfer(cpi_ctx, amount)?;
-        Ok(())
-    }
+ pub fn deposit_token_to_estate(ctx: Context<DepositTokenToEstate>, amount: u64) -> Result<()> {
+    // Validate token account constraints
+    require!(
+        ctx.accounts.depositor_token_account.mint == ctx.accounts.token_mint.key(),
+        EstateError::InvalidTokenMint
+    );
+    require!(
+        ctx.accounts.depositor_token_account.owner == ctx.accounts.depositor.key(),
+        EstateError::InvalidTokenOwner
+    );
+    require!(
+        ctx.accounts.estate_vault.mint == ctx.accounts.token_mint.key(),
+        EstateError::InvalidTokenMint
+    );
+    require!(
+        ctx.accounts.estate_vault.owner == ctx.accounts.estate.key(),
+        EstateError::InvalidTokenOwner
+    );
+    
+    // Use token_interface for Token 2022 compatibility
+    let cpi_accounts = anchor_spl::token_interface::TransferChecked {
+        from: ctx.accounts.depositor_token_account.to_account_info(),
+        mint: ctx.accounts.token_mint.to_account_info(),
+        to: ctx.accounts.estate_vault.to_account_info(),
+        authority: ctx.accounts.depositor.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+    
+    // Use transfer_checked for Token 2022 compatibility
+    anchor_spl::token_interface::transfer_checked(
+        cpi_ctx,
+        amount,
+        ctx.accounts.token_mint.decimals,
+    )?;
+    
+    Ok(())
+}
     
     pub fn update_trading_value(
         ctx: Context<UpdateTradingValue>,
