@@ -5,6 +5,9 @@ use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use anchor_spl::token_interface::{TokenInterface, Mint as MintInterface, TokenAccount as TokenAccountInterface};
 use anchor_spl::associated_token::AssociatedToken;
 
+mod emergency_simple;
+use emergency_simple::*;
+
 declare_id!("HvyyPrXbrhNEiGhttDUGMsYjKDPkYER2uFaLo7Bkei92");
 
 // Estate Seeds
@@ -1353,40 +1356,20 @@ pub mod defai_estate {
         Ok(())
     }
 
-    pub fn emergency_lock(ctx: Context<EmergencyLock>) -> Result<()> {
-        let estate = &mut ctx.accounts.estate;
-        
-        require!(!estate.is_locked, EstateError::AlreadyLocked);
-        require!(
-            ctx.accounts.owner.key() == estate.owner,
-            EstateError::UnauthorizedAccess
-        );
-
-        estate.is_locked = true;
-
-        msg!("Estate emergency locked");
-
-        Ok(())
+    pub fn emergency_lock(
+        ctx: Context<EmergencyLockContext>,
+        reason: String,
+    ) -> Result<()> {
+        emergency_lock_impl(ctx, reason)
     }
 
-    pub fn emergency_unlock(
-        ctx: Context<EmergencyUnlock>,
-        _verification_code: [u8; 32],
-    ) -> Result<()> {
-        let estate = &mut ctx.accounts.estate;
-        
-        require!(estate.is_locked, EstateError::NotLocked);
-        require!(
-            ctx.accounts.owner.key() == estate.owner,
-            EstateError::UnauthorizedAccess
-        );
-
-        // In production, verify the code
-        estate.is_locked = false;
-
-        msg!("Estate emergency unlocked");
-
-        Ok(())
+    pub fn emergency_unlock(ctx: Context<EmergencyUnlockContext>) -> Result<()> {
+        emergency_unlock_impl(ctx)
+    }
+    
+    // Force unlock by multisig
+    pub fn force_unlock_by_multisig(ctx: Context<ForceUnlockByMultisig>) -> Result<()> {
+        emergency_simple::force_unlock_by_multisig(ctx)
     }
 
     pub fn initiate_recovery(
@@ -1628,8 +1611,8 @@ pub enum ProposalAction {
     UpdateBeneficiaries { beneficiaries: Vec<Beneficiary> },
     CreateRWA { rwa_type: String, name: String, description: String, value: String, metadata_uri: String },
     DeleteRWA { rwa_id: Pubkey },
-    EmergencyLock,
-    EmergencyUnlock { verification_code: [u8; 32] },
+    EmergencyLock { reason: String },
+    EmergencyUnlock { reason: String },
     EnableTrading { ai_agent: Pubkey, human_share: u8, strategy: TradingStrategy, stop_loss: Option<u8>, emergency_delay_hours: u32 },
 }
 
@@ -2259,29 +2242,7 @@ pub struct CloseEstate<'info> {
     pub estate: Account<'info, Estate>,
 }
 
-#[derive(Accounts)]
-pub struct EmergencyLock<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    
-    #[account(
-        mut,
-        has_one = owner,
-    )]
-    pub estate: Account<'info, Estate>,
-}
-
-#[derive(Accounts)]
-pub struct EmergencyUnlock<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    
-    #[account(
-        mut,
-        has_one = owner,
-    )]
-    pub estate: Account<'info, Estate>,
-}
+// Emergency lock contexts are imported from emergency module
 
 #[derive(Accounts)]
 pub struct InitiateRecovery<'info> {
@@ -2617,6 +2578,14 @@ pub enum EstateError {
     // Multi-sig Errors
     #[msg("Invalid number of signers. Must be between 2 and 10")]
     InvalidSignerCount,
+    
+    // Emergency Lock Errors  
+    #[msg("Invalid lock reason - must be between 5 and 200 characters")]
+    InvalidLockReason,
+    #[msg("No multisig attached to estate")]
+    NoMultisigAttached,
+    #[msg("Invalid multisig")]
+    InvalidMultisig,
     #[msg("Invalid threshold. Must be greater than 0 and less than or equal to number of signers")]
     InvalidThreshold,
     #[msg("Unauthorized signer")]
