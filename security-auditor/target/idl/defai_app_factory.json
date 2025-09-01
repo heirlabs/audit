@@ -207,9 +207,367 @@
           }
         }
       ]
+    },
+    {
+      "name": "purchaseAppWithInit",
+      "accounts": [
+        {
+          "name": "appFactory",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "appRegistration",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userAppAccess",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "sftMint",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userSftAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "treasuryDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "treasury",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "defaiMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "associatedTokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "appId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "updateAppMetadata",
+      "accounts": [
+        {
+          "name": "appRegistration",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "appId",
+          "type": "u64"
+        },
+        {
+          "name": "newMetadataUri",
+          "type": {
+            "option": "string"
+          }
+        },
+        {
+          "name": "newPrice",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "refundPurchase",
+      "accounts": [
+        {
+          "name": "appFactory",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "appRegistration",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userAppAccess",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "sftMint",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userSftAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creatorDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "treasuryDefaiAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "treasury",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "defaiMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "appId",
+          "type": "u64"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "submitReview",
+      "accounts": [
+        {
+          "name": "review",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userAppAccess",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "appId",
+          "type": "u64"
+        },
+        {
+          "name": "rating",
+          "type": "u8"
+        },
+        {
+          "name": "commentCid",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "updateReview",
+      "accounts": [
+        {
+          "name": "review",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "reviewer",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "newRating",
+          "type": "u8"
+        },
+        {
+          "name": "newCommentCid",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "transferAuthority",
+      "accounts": [
+        {
+          "name": "appFactory",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "newAuthority",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "acceptAuthority",
+      "accounts": [
+        {
+          "name": "appFactory",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "newAuthority",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancelAuthorityTransfer",
+      "accounts": [
+        {
+          "name": "appFactory",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "AppReview",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "appId",
+            "type": "u64"
+          },
+          {
+            "name": "reviewer",
+            "type": "publicKey"
+          },
+          {
+            "name": "rating",
+            "type": "u8"
+          },
+          {
+            "name": "commentCid",
+            "type": "string"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "AppFactory",
       "type": {
@@ -242,6 +600,12 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "pendingAuthority",
+            "type": {
+              "option": "publicKey"
+            }
           }
         ]
       }
@@ -323,7 +687,287 @@
       }
     }
   ],
+  "types": [
+    {
+      "name": "RefundError",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "RefundWindowExpired"
+          },
+          {
+            "name": "NoSftToRefund"
+          },
+          {
+            "name": "InsufficientCreatorBalance"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReviewError",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "InvalidRating"
+          },
+          {
+            "name": "MustOwnAppToReview"
+          },
+          {
+            "name": "UnauthorizedReviewer"
+          },
+          {
+            "name": "CommentCidTooLong"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AppFactoryError",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "InvalidPlatformFee"
+          },
+          {
+            "name": "InvalidPrice"
+          },
+          {
+            "name": "InvalidMaxSupply"
+          },
+          {
+            "name": "MetadataUriTooLong"
+          },
+          {
+            "name": "AppNotActive"
+          },
+          {
+            "name": "MaxSupplyReached"
+          },
+          {
+            "name": "MathOverflow"
+          },
+          {
+            "name": "UnauthorizedCreator"
+          },
+          {
+            "name": "UnauthorizedAuthority"
+          },
+          {
+            "name": "InvalidCreator"
+          },
+          {
+            "name": "InvalidTreasury"
+          },
+          {
+            "name": "InvalidDefaiMint"
+          },
+          {
+            "name": "InvalidMintAuthority"
+          },
+          {
+            "name": "InvalidFreezeAuthority"
+          },
+          {
+            "name": "MintAlreadyInUse"
+          },
+          {
+            "name": "InvalidMintDecimals"
+          },
+          {
+            "name": "InvalidCollection"
+          },
+          {
+            "name": "InsufficientBalance"
+          },
+          {
+            "name": "NotPendingAuthority"
+          },
+          {
+            "name": "MustOwnAppToReview"
+          },
+          {
+            "name": "UnauthorizedReviewer"
+          },
+          {
+            "name": "NoSftToRefund"
+          },
+          {
+            "name": "InsufficientCreatorBalance"
+          }
+        ]
+      }
+    }
+  ],
   "events": [
+    {
+      "name": "AuthorityTransferInitiated",
+      "fields": [
+        {
+          "name": "from",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "to",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "AuthorityTransferAccepted",
+      "fields": [
+        {
+          "name": "newAuthority",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "AuthorityTransferCancelled",
+      "fields": [
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "AppRefunded",
+      "fields": [
+        {
+          "name": "appId",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "user",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "refundAmount",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "ReviewSubmitted",
+      "fields": [
+        {
+          "name": "appId",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "reviewer",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "rating",
+          "type": "u8",
+          "index": false
+        },
+        {
+          "name": "commentCid",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "ReviewUpdated",
+      "fields": [
+        {
+          "name": "appId",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "reviewer",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "newRating",
+          "type": "u8",
+          "index": false
+        },
+        {
+          "name": "newCommentCid",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "AppUpdated",
+      "fields": [
+        {
+          "name": "appId",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "newPrice",
+          "type": {
+            "option": "u64"
+          },
+          "index": false
+        },
+        {
+          "name": "newMetadataUri",
+          "type": {
+            "option": "string"
+          },
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
     {
       "name": "AppRegistered",
       "fields": [
@@ -442,63 +1086,8 @@
   "errors": [
     {
       "code": 6000,
-      "name": "InvalidPlatformFee",
-      "msg": "Invalid platform fee (must be <= 10000 basis points)"
-    },
-    {
-      "code": 6001,
-      "name": "InvalidPrice",
-      "msg": "Invalid price (must be > 0)"
-    },
-    {
-      "code": 6002,
-      "name": "InvalidMaxSupply",
-      "msg": "Invalid max supply (must be > 0)"
-    },
-    {
-      "code": 6003,
-      "name": "MetadataUriTooLong",
-      "msg": "Metadata URI too long (max 100 characters)"
-    },
-    {
-      "code": 6004,
-      "name": "AppNotActive",
-      "msg": "App is not active"
-    },
-    {
-      "code": 6005,
-      "name": "MaxSupplyReached",
-      "msg": "Maximum supply reached"
-    },
-    {
-      "code": 6006,
-      "name": "MathOverflow",
-      "msg": "Math overflow"
-    },
-    {
-      "code": 6007,
-      "name": "UnauthorizedCreator",
-      "msg": "Unauthorized creator"
-    },
-    {
-      "code": 6008,
-      "name": "UnauthorizedAuthority",
-      "msg": "Unauthorized authority"
-    },
-    {
-      "code": 6009,
-      "name": "InvalidCreator",
-      "msg": "Invalid creator provided"
-    },
-    {
-      "code": 6010,
-      "name": "InvalidTreasury",
-      "msg": "Invalid treasury provided"
-    },
-    {
-      "code": 6011,
-      "name": "InvalidDefaiMint",
-      "msg": "Invalid DEFAI mint provided"
+      "name": "NotPendingAuthority",
+      "msg": "Not the pending authority"
     }
   ]
 }

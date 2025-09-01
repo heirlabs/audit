@@ -1,7 +1,25 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program::System;
+use anchor_spl::token::Mint;
+use solana_program::program_option::COption;
 
 mod purchase_app;
 use purchase_app::*;
+
+mod purchase_with_init;
+use purchase_with_init::*;
+
+mod update_app;
+use update_app::*;
+
+mod refund;
+use refund::*;
+
+mod reviews;
+use reviews::*;
+
+mod authority;
+use authority::*;
 
 declare_id!("FyDBGJFfviW1mqKYWueLQCW4YUm9RmUgQeEYw1izszDA");
 
@@ -34,6 +52,7 @@ pub mod defai_app_factory {
         app_factory.platform_fee_bps = platform_fee_bps;
         app_factory.total_apps = 0;
         app_factory.bump = ctx.bumps.app_factory;
+        app_factory.pending_authority = None;
 
         msg!("AppFactory initialized with {}% platform fee", platform_fee_bps as f64 / 100.0);
         Ok(())
@@ -300,6 +319,67 @@ pub mod defai_app_factory {
         
         Ok(())
     }
+
+    // Single-transaction purchase with automatic ATA initialization
+    pub fn purchase_app_with_init(ctx: Context<PurchaseAppWithInit>, app_id: u64) -> Result<()> {
+        purchase_with_init::purchase_app_with_init(ctx, app_id)
+    }
+
+    // Update app metadata
+    pub fn update_app_metadata(
+        ctx: Context<UpdateAppMetadata>,
+        app_id: u64,
+        new_metadata_uri: Option<String>,
+        new_price: Option<u64>,
+    ) -> Result<()> {
+        update_app::update_app_metadata(ctx, app_id, new_metadata_uri, new_price)
+    }
+
+    // Refund purchase
+    pub fn refund_purchase(
+        ctx: Context<RefundPurchase>,
+        app_id: u64,
+        reason: String,
+    ) -> Result<()> {
+        refund::refund_purchase(ctx, app_id, reason)
+    }
+
+    // Submit review
+    pub fn submit_review(
+        ctx: Context<SubmitReview>,
+        app_id: u64,
+        rating: u8,
+        comment_cid: String,
+    ) -> Result<()> {
+        reviews::submit_review(ctx, app_id, rating, comment_cid)
+    }
+
+    // Update review
+    pub fn update_review(
+        ctx: Context<UpdateReview>,
+        new_rating: u8,
+        new_comment_cid: String,
+    ) -> Result<()> {
+        reviews::update_review(ctx, new_rating, new_comment_cid)
+    }
+
+    // Transfer authority (2-step process)
+    pub fn transfer_authority(
+        ctx: Context<TransferAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        authority::transfer_authority(ctx, new_authority)
+    }
+
+    // Accept authority transfer
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        authority::accept_authority(ctx)
+    }
+
+    // Cancel authority transfer
+    pub fn cancel_authority_transfer(ctx: Context<CancelAuthorityTransfer>) -> Result<()> {
+        authority::cancel_authority_transfer(ctx)
+    }
 }
 
 // ============================================================================
@@ -315,10 +395,11 @@ pub struct AppFactory {
     pub platform_fee_bps: u16,         // Platform fee in basis points (2000 = 20%)
     pub total_apps: u64,                // Total number of registered apps
     pub bump: u8,                       // PDA bump seed
+    pub pending_authority: Option<Pubkey>, // For 2-step authority transfer
 }
 
 impl AppFactory {
-    pub const LEN: usize = 8 + 32 + 32 + 32 + 32 + 2 + 8 + 1;
+    pub const LEN: usize = 8 + 32 + 32 + 32 + 32 + 2 + 8 + 1 + (1 + 32);
 }
 
 #[account]
@@ -370,14 +451,26 @@ pub struct InitializeAppFactory<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
     
-    /// CHECK: DEFAI token mint
-    pub defai_mint: AccountInfo<'info>,
+    #[account(
+        constraint = defai_mint.mint_authority.is_some() 
+            @ AppFactoryError::InvalidDefaiMint,
+        constraint = defai_mint.decimals == 6 
+            @ AppFactoryError::InvalidMintDecimals
+    )]
+    pub defai_mint: Account<'info, Mint>,
     
-    /// CHECK: Platform treasury wallet
-    pub treasury: AccountInfo<'info>,
+    /// CHECK: Platform treasury wallet - verified to be a system account
+    #[account(
+        constraint = treasury.owner == &System::id() 
+            @ AppFactoryError::InvalidTreasury
+    )]
+    pub treasury: SystemAccount<'info>,
     
-    /// CHECK: Master collection mint for "DEFAI APPs"
-    pub master_collection: AccountInfo<'info>,
+    #[account(
+        constraint = master_collection.supply > 0
+            @ AppFactoryError::InvalidCollection
+    )]
+    pub master_collection: Account<'info, Mint>,
     
     pub system_program: Program<'info, System>,
 }
@@ -401,8 +494,17 @@ pub struct RegisterApp<'info> {
     )]
     pub app_registration: Account<'info, AppRegistration>,
     
-    /// CHECK: SFT mint will be created separately and passed in
-    pub sft_mint: AccountInfo<'info>,
+    #[account(
+        constraint = sft_mint.mint_authority == COption::Some(app_registration.key()) 
+            @ AppFactoryError::InvalidMintAuthority,
+        constraint = sft_mint.freeze_authority == COption::Some(app_registration.key())
+            @ AppFactoryError::InvalidFreezeAuthority,
+        constraint = sft_mint.supply == 0 
+            @ AppFactoryError::MintAlreadyInUse,
+        constraint = sft_mint.decimals == 0 
+            @ AppFactoryError::InvalidMintDecimals
+    )]
+    pub sft_mint: Account<'info, Mint>,
     
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -551,6 +653,28 @@ pub enum AppFactoryError {
     InvalidTreasury,
     #[msg("Invalid DEFAI mint provided")]
     InvalidDefaiMint,
+    #[msg("Invalid mint authority - must be set to app registration PDA")]
+    InvalidMintAuthority,
+    #[msg("Invalid freeze authority - must be set to app registration PDA")]
+    InvalidFreezeAuthority,
+    #[msg("Mint already in use - supply must be 0")]
+    MintAlreadyInUse,
+    #[msg("Invalid mint decimals - must be 0 for SFT")]
+    InvalidMintDecimals,
+    #[msg("Invalid collection mint")]
+    InvalidCollection,
+    #[msg("Insufficient balance to purchase")]
+    InsufficientBalance,
+    #[msg("Not the pending authority")]
+    NotPendingAuthority,
+    #[msg("Must own the app to review it")]
+    MustOwnAppToReview,
+    #[msg("Unauthorized reviewer")]
+    UnauthorizedReviewer,
+    #[msg("No SFT to refund")]
+    NoSftToRefund,
+    #[msg("Insufficient creator balance for refund")]
+    InsufficientCreatorBalance,
 }
 
 // ============================================================================
