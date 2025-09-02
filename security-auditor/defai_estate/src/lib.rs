@@ -376,6 +376,13 @@ pub mod defai_estate {
         estate.emergency_delay_hours = emergency_delay_hours;
         estate.last_trading_update = clock.unix_timestamp;
         
+        // Initialize risk settings based on strategy
+        estate.risk_settings = Some(match strategy {
+            TradingStrategy::Conservative => RiskManagementSettings::default_conservative(),
+            TradingStrategy::Balanced => RiskManagementSettings::default_balanced(),
+            TradingStrategy::Aggressive => RiskManagementSettings::default_aggressive(),
+        });
+        
         // Reset trading values
         estate.human_contribution = 0;
         estate.ai_contribution = 0;

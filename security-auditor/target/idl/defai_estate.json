@@ -885,7 +885,12 @@
           "isSigner": false
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "emergencyUnlock",
@@ -901,14 +906,71 @@
           "isSigner": false
         }
       ],
+      "args": []
+    },
+    {
+      "name": "forceUnlockByMultisig",
+      "accounts": [
+        {
+          "name": "executor",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "estate",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "multisig",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "updateRiskSettings",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "estate",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
       "args": [
         {
-          "name": "verificationCode",
+          "name": "settings",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "defined": "RiskManagementSettings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateStrategyMix",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "estate",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "strategyMix",
+          "type": {
+            "defined": "StrategyMix"
           }
         }
       ]
@@ -1139,6 +1201,14 @@
             "name": "multisig",
             "type": {
               "option": "publicKey"
+            }
+          },
+          {
+            "name": "riskSettings",
+            "type": {
+              "option": {
+                "defined": "RiskManagementSettings"
+              }
             }
           }
         ]
@@ -1389,6 +1459,148 @@
   ],
   "types": [
     {
+      "name": "RiskManagementSettings",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maxDrawdownBps",
+            "type": "u16"
+          },
+          {
+            "name": "maxDailyLossBps",
+            "type": "u16"
+          },
+          {
+            "name": "maxPositionSizeBps",
+            "type": "u16"
+          },
+          {
+            "name": "minLiquidityBuffer",
+            "type": "u64"
+          },
+          {
+            "name": "strategyMix",
+            "type": {
+              "defined": "StrategyMix"
+            }
+          },
+          {
+            "name": "maxOpenPositions",
+            "type": "u8"
+          },
+          {
+            "name": "positionTimeoutHours",
+            "type": "u32"
+          },
+          {
+            "name": "useStopLoss",
+            "type": "bool"
+          },
+          {
+            "name": "stopLossBps",
+            "type": "u16"
+          },
+          {
+            "name": "useTakeProfit",
+            "type": "bool"
+          },
+          {
+            "name": "takeProfitBps",
+            "type": "u16"
+          },
+          {
+            "name": "tradingEnabledHours",
+            "type": {
+              "option": {
+                "defined": "TradingHours"
+              }
+            }
+          },
+          {
+            "name": "currentDrawdownBps",
+            "type": "u16"
+          },
+          {
+            "name": "dailyLossBps",
+            "type": "u16"
+          },
+          {
+            "name": "lastRiskReset",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StrategyMix",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cashAndCarryBps",
+            "type": "u16"
+          },
+          {
+            "name": "coveredOptionsBps",
+            "type": "u16"
+          },
+          {
+            "name": "liquidityProvisionBps",
+            "type": "u16"
+          },
+          {
+            "name": "optionsTradingBps",
+            "type": "u16"
+          },
+          {
+            "name": "lpWithRebalancingBps",
+            "type": "u16"
+          },
+          {
+            "name": "lowLeveragePerpsBps",
+            "type": "u16"
+          },
+          {
+            "name": "highLeveragePerpsBps",
+            "type": "u16"
+          },
+          {
+            "name": "nakedOptionsBps",
+            "type": "u16"
+          },
+          {
+            "name": "volatileLpPairsBps",
+            "type": "u16"
+          },
+          {
+            "name": "arbitrageBps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TradingHours",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "startHourUtc",
+            "type": "u8"
+          },
+          {
+            "name": "endHourUtc",
+            "type": "u8"
+          },
+          {
+            "name": "activeDays",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "Beneficiary",
       "type": {
         "kind": "struct",
@@ -1433,6 +1645,23 @@
           {
             "name": "amount",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RiskLimitType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "MaxDrawdown"
+          },
+          {
+            "name": "MaxDailyLoss"
+          },
+          {
+            "name": "MaxPositionSize"
           }
         ]
       }
@@ -1507,19 +1736,20 @@
             ]
           },
           {
-            "name": "EmergencyLock"
+            "name": "EmergencyLock",
+            "fields": [
+              {
+                "name": "reason",
+                "type": "string"
+              }
+            ]
           },
           {
             "name": "EmergencyUnlock",
             "fields": [
               {
-                "name": "verificationCode",
-                "type": {
-                  "array": [
-                    "u8",
-                    32
-                  ]
-                }
+                "name": "reason",
+                "type": "string"
               }
             ]
           },
@@ -1557,6 +1787,120 @@
     }
   ],
   "events": [
+    {
+      "name": "EstateLocked",
+      "fields": [
+        {
+          "name": "estateId",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "EstateUnlocked",
+      "fields": [
+        {
+          "name": "estateId",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "RiskSettingsUpdated",
+      "fields": [
+        {
+          "name": "estate",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "maxDrawdownBps",
+          "type": "u16",
+          "index": false
+        },
+        {
+          "name": "maxDailyLossBps",
+          "type": "u16",
+          "index": false
+        },
+        {
+          "name": "maxPositionSizeBps",
+          "type": "u16",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "StrategyMixUpdated",
+      "fields": [
+        {
+          "name": "estate",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "strategyMix",
+          "type": {
+            "defined": "StrategyMix"
+          },
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "RiskLimitTriggered",
+      "fields": [
+        {
+          "name": "estate",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "limitType",
+          "type": {
+            "defined": "RiskLimitType"
+          },
+          "index": false
+        },
+        {
+          "name": "currentValueBps",
+          "type": "u16",
+          "index": false
+        },
+        {
+          "name": "limitValueBps",
+          "type": "u16",
+          "index": false
+        },
+        {
+          "name": "timestamp",
+          "type": "i64",
+          "index": false
+        }
+      ]
+    },
     {
       "name": "MultisigCreated",
       "fields": [
@@ -2407,43 +2751,118 @@
     },
     {
       "code": 6039,
+      "name": "InvalidLockReason",
+      "msg": "Invalid lock reason - must be between 5 and 200 characters"
+    },
+    {
+      "code": 6040,
+      "name": "NoMultisigAttached",
+      "msg": "No multisig attached to estate"
+    },
+    {
+      "code": 6041,
+      "name": "InvalidMultisig",
+      "msg": "Invalid multisig"
+    },
+    {
+      "code": 6042,
       "name": "InvalidThreshold",
       "msg": "Invalid threshold. Must be greater than 0 and less than or equal to number of signers"
     },
     {
-      "code": 6040,
+      "code": 6043,
       "name": "UnauthorizedSigner",
       "msg": "Unauthorized signer"
     },
     {
-      "code": 6041,
+      "code": 6044,
       "name": "AlreadyApproved",
       "msg": "Proposal already approved by this signer"
     },
     {
-      "code": 6042,
+      "code": 6045,
       "name": "ProposalAlreadyExecuted",
       "msg": "Proposal already executed"
     },
     {
-      "code": 6043,
+      "code": 6046,
       "name": "InsufficientApprovals",
       "msg": "Insufficient approvals to execute proposal"
     },
     {
-      "code": 6044,
+      "code": 6047,
       "name": "MultisigAlreadyAttached",
       "msg": "Multisig already attached to this estate"
     },
     {
-      "code": 6045,
+      "code": 6048,
       "name": "NoPendingAdminChange",
       "msg": "No pending admin change"
     },
     {
-      "code": 6046,
+      "code": 6049,
       "name": "TimelockNotExpired",
       "msg": "Timelock not expired"
+    },
+    {
+      "code": 6050,
+      "name": "InvalidRiskParameter",
+      "msg": "Invalid risk parameter - values exceed allowed limits"
+    },
+    {
+      "code": 6051,
+      "name": "InvalidStrategyMix",
+      "msg": "Invalid strategy mix - allocations must sum to 100%"
+    },
+    {
+      "code": 6052,
+      "name": "MaxDrawdownExceeded",
+      "msg": "Maximum drawdown exceeded"
+    },
+    {
+      "code": 6053,
+      "name": "MaxDailyLossExceeded",
+      "msg": "Maximum daily loss exceeded"
+    },
+    {
+      "code": 6054,
+      "name": "InvalidProposal",
+      "msg": "Invalid proposal"
+    },
+    {
+      "code": 6055,
+      "name": "ProposalNotExecuted",
+      "msg": "Proposal not executed"
+    },
+    {
+      "code": 6056,
+      "name": "InvalidProposalType",
+      "msg": "Invalid proposal type"
+    },
+    {
+      "code": 6057,
+      "name": "InvalidEmergencyState",
+      "msg": "Invalid emergency state"
+    },
+    {
+      "code": 6058,
+      "name": "EmergencyLockCooldown",
+      "msg": "Emergency lock cooldown period not expired"
+    },
+    {
+      "code": 6059,
+      "name": "UnlockTooEarly",
+      "msg": "Cannot unlock yet - minimum delay not expired"
+    },
+    {
+      "code": 6060,
+      "name": "MaxUnlockAttemptsExceeded",
+      "msg": "Maximum unlock attempts exceeded"
+    },
+    {
+      "code": 6061,
+      "name": "InvalidVerificationCode",
+      "msg": "Invalid verification code"
     }
   ]
 }
