@@ -8,6 +8,10 @@ use anchor_spl::associated_token::AssociatedToken;
 mod emergency_simple;
 use emergency_simple::*;
 
+mod risk_management;
+#[allow(ambiguous_glob_reexports)]
+pub use risk_management::*;
+
 declare_id!("HvyyPrXbrhNEiGhttDUGMsYjKDPkYER2uFaLo7Bkei92");
 
 // Estate Seeds
@@ -1371,6 +1375,21 @@ pub mod defai_estate {
     pub fn force_unlock_by_multisig(ctx: Context<ForceUnlockByMultisig>) -> Result<()> {
         emergency_simple::force_unlock_by_multisig(ctx)
     }
+    
+    // Risk Management Functions
+    pub fn update_risk_settings(
+        ctx: Context<UpdateRiskSettings>,
+        settings: RiskManagementSettings,
+    ) -> Result<()> {
+        risk_management::update_risk_settings(ctx, settings)
+    }
+    
+    pub fn update_strategy_mix(
+        ctx: Context<UpdateStrategyMix>,
+        strategy_mix: StrategyMix,
+    ) -> Result<()> {
+        risk_management::update_strategy_mix(ctx, strategy_mix)
+    }
 
     pub fn initiate_recovery(
         ctx: Context<InitiateRecovery>,
@@ -1516,6 +1535,7 @@ pub struct Estate {
     pub emergency_withdrawal_time: i64,
     pub last_trading_update: i64,
     pub multisig: Option<Pubkey>,
+    pub risk_settings: Option<RiskManagementSettings>, // Comprehensive risk management
 }
 
 impl Estate {
@@ -1775,6 +1795,7 @@ pub struct CreateEstate<'info> {
             8 + // emergency_withdrawal_time
             8 + // last_trading_update
             (1 + 32) + // multisig Option<Pubkey>
+            (1 + RiskManagementSettings::LEN) + // risk_settings Option
             100, // buffer
         seeds = [ESTATE_SEED, owner.key().as_ref(), global_counter.count.to_le_bytes().as_ref()],
         bump
@@ -2602,4 +2623,30 @@ pub enum EstateError {
     NoPendingAdminChange,
     #[msg("Timelock not expired")]
     TimelockNotExpired,
+    
+    // Risk Management Errors
+    #[msg("Invalid risk parameter - values exceed allowed limits")]
+    InvalidRiskParameter,
+    #[msg("Invalid strategy mix - allocations must sum to 100%")]
+    InvalidStrategyMix,
+    #[msg("Maximum drawdown exceeded")]
+    MaxDrawdownExceeded,
+    #[msg("Maximum daily loss exceeded")]
+    MaxDailyLossExceeded,
+    #[msg("Invalid proposal")]
+    InvalidProposal,
+    #[msg("Proposal not executed")]
+    ProposalNotExecuted,
+    #[msg("Invalid proposal type")]
+    InvalidProposalType,
+    #[msg("Invalid emergency state")]
+    InvalidEmergencyState,
+    #[msg("Emergency lock cooldown period not expired")]
+    EmergencyLockCooldown,
+    #[msg("Cannot unlock yet - minimum delay not expired")]
+    UnlockTooEarly,
+    #[msg("Maximum unlock attempts exceeded")]
+    MaxUnlockAttemptsExceeded,
+    #[msg("Invalid verification code")]
+    InvalidVerificationCode,
 }
