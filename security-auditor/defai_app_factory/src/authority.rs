@@ -108,6 +108,10 @@ pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
 }
 
 pub fn cancel_authority_transfer(ctx: Context<CancelAuthorityTransfer>) -> Result<()> {
+    require!(
+        ctx.accounts.app_factory.pending_authority.is_some(),
+        AuthorityError::NotPendingAuthority
+    );
     ctx.accounts.app_factory.pending_authority = None;
     
     emit!(AuthorityTransferCancelled {

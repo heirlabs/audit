@@ -120,6 +120,23 @@ pub struct PurchaseAppAccessOptimized<'info> {
         bump
     )]
     pub app_registration: Box<Account<'info, AppRegistration>>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(
+        constraint = defai_mint.key() == app_factory.defai_mint 
+            @ AppFactoryError::InvalidDefaiMint
+    )]
+    pub defai_mint: Account<'info, Mint>,
+    
+    /// CHECK: Creator must match registration
+    #[account(address = app_registration.creator)]
+    pub creator: AccountInfo<'info>,
+    
+    /// CHECK: Treasury must match factory
+    #[account(address = app_factory.treasury)]
+    pub treasury: AccountInfo<'info>,
     
     #[account(
         init,
@@ -158,28 +175,21 @@ pub struct PurchaseAppAccessOptimized<'info> {
     #[account(
         mut,
         associated_token::mint = defai_mint,
-        associated_token::authority = app_registration.creator
+        associated_token::authority = creator
     )]
     pub creator_defai_ata: Box<Account<'info, TokenAccount>>,
     
-    // Validate treasury's DEFAI ATA
+    // Validate treasury's DEFAI ATA; create if needed when preparing
     #[account(
-        mut,
+        init_if_needed,
+        payer = user,
         associated_token::mint = defai_mint,
-        associated_token::authority = app_factory.treasury
+        associated_token::authority = treasury
     )]
     pub treasury_defai_ata: Box<Account<'info, TokenAccount>>,
     
-    #[account(mut)]
-    pub user: Signer<'info>,
-    
-    #[account(
-        constraint = defai_mint.key() == app_factory.defai_mint 
-            @ AppFactoryError::InvalidDefaiMint
-    )]
-    pub defai_mint: Account<'info, Mint>,
-    
     pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 

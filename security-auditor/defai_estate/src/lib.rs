@@ -61,8 +61,16 @@ pub mod defai_estate {
             signers.len() >= MIN_SIGNERS && signers.len() <= MAX_SIGNERS,
             EstateError::InvalidSignerCount
         );
+        // Ensure no duplicate signers
+        {
+            let mut unique = std::collections::HashSet::new();
+            require!(
+                signers.iter().all(|s| unique.insert(*s)),
+                EstateError::DuplicateSigner
+            );
+        }
         require!(
-            threshold > 0 && threshold as usize <= signers.len(),
+            threshold > 1 && threshold as usize <= signers.len(),
             EstateError::InvalidThreshold
         );
         
@@ -1355,12 +1363,20 @@ pub mod defai_estate {
 
     pub fn close_estate(ctx: Context<CloseEstate>) -> Result<()> {
         let estate = &ctx.accounts.estate;
+        let asset_summary = &ctx.accounts.asset_summary;
+        
+        // Verify owner authorization (account context enforces has_one = owner)
+        require!(ctx.accounts.owner.key() == estate.owner, EstateError::UnauthorizedAccess);
         
         require!(estate.is_claimable, EstateError::NotClaimable);
         require!(
             estate.total_claims == estate.total_beneficiaries,
             EstateError::NotAllClaimed
         );
+        
+        // Require no SOL beyond rent and no RWAs (tokens/NFTs must be withdrawn)
+        require!(asset_summary.sol_balance <= MIN_RENT_BALANCE, EstateError::AssetsRemain);
+        require!(estate.total_rwas == 0, EstateError::AssetsRemain);
 
         msg!("Estate #{} closed", estate.estate_number);
 
@@ -1680,7 +1696,11 @@ pub struct AcceptAdminChange<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
     
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = multisig.pending_admin == Some(signer.key())
+            @ EstateError::UnauthorizedAccess
+    )]
     pub multisig: Account<'info, Multisig>,
 }
 
@@ -2072,7 +2092,6 @@ pub struct UpdateBeneficiaries<'info> {
     
     #[account(
         mut,
-        has_one = owner,
     )]
     pub estate: Account<'info, Estate>,
 }
@@ -2122,7 +2141,7 @@ pub struct ScanEstateAssets<'info> {
     pub estate: Account<'info, Estate>,
     
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         space = 8 + 32 + 8 + 8 + 4 + 4,
         seeds = [ASSET_SUMMARY_SEED, estate.key().as_ref()],
@@ -2261,13 +2280,20 @@ pub struct ClaimNFT<'info> {
 #[derive(Accounts)]
 pub struct CloseEstate<'info> {
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub owner: Signer<'info>,
     
     #[account(
         mut,
-        close = authority,
+        close = owner,
+        has_one = owner
     )]
     pub estate: Account<'info, Estate>,
+
+    #[account(
+        seeds = [ASSET_SUMMARY_SEED, estate.key().as_ref()],
+        bump
+    )]
+    pub asset_summary: Account<'info, AssetSummary>,
 }
 
 // Emergency lock contexts are imported from emergency module
@@ -2572,6 +2598,8 @@ pub enum EstateError {
     NFTAlreadyClaimed,
     #[msg("Invalid NFT amount - must be exactly 1")]
     InvalidNFTAmount,
+    #[msg("Assets remain in estate - withdraw tokens/NFTs before closing")]
+    AssetsRemain,
     #[msg("Invalid token mint")]
     InvalidTokenMint,
     #[msg("Invalid token owner")]
@@ -2616,6 +2644,8 @@ pub enum EstateError {
     InvalidMultisig,
     #[msg("Invalid threshold. Must be greater than 0 and less than or equal to number of signers")]
     InvalidThreshold,
+    #[msg("Duplicate signer detected in multisig initialization")]
+    DuplicateSigner,
     #[msg("Unauthorized signer")]
     UnauthorizedSigner,
     #[msg("Proposal already approved by this signer")]
@@ -2646,6 +2676,12 @@ pub enum EstateError {
     ProposalNotExecuted,
     #[msg("Invalid proposal type")]
     InvalidProposalType,
+    #[msg("Invalid proposal estate - target estate mismatch")]
+    InvalidProposalEstate,
+    #[msg("Executor must be the original proposer for this action")]
+    ProposerNotExecutor,
+    #[msg("Not enough approvals for this proposal")]
+    NotEnoughApprovals,
     #[msg("Invalid emergency state")]
     InvalidEmergencyState,
     #[msg("Emergency lock cooldown period not expired")]

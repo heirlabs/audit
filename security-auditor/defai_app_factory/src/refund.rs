@@ -59,9 +59,7 @@ pub struct RefundPurchase<'info> {
     #[account(
         mut,
         associated_token::mint = defai_mint,
-        associated_token::authority = app_registration.creator,
-        constraint = creator_defai_ata.amount >= refund_amount(app_registration.price, app_factory.platform_fee_bps)
-            @ AppFactoryError::InsufficientCreatorBalance
+        associated_token::authority = app_registration.creator
     )]
     pub creator_defai_ata: Box<Account<'info, TokenAccount>>,
     
@@ -141,7 +139,8 @@ pub fn refund_purchase(
         RefundError::RefundWindowExpired
     );
     
-    let price = ctx.accounts.app_registration.price;
+    // Use the recorded purchase price for refund
+    let price = ctx.accounts.user_app_access.purchase_price;
     let platform_fee_bps = ctx.accounts.app_factory.platform_fee_bps;
     
     // Calculate refund amounts
@@ -166,6 +165,10 @@ pub fn refund_purchase(
     );
     token::burn(burn_ctx, 1)?;
     
+    // Validate balances before attempting transfer to avoid DoS via 0-balance accounts
+    require!(ctx.accounts.creator_defai_ata.amount >= creator_refund, AppFactoryError::InsufficientCreatorBalance);
+    require!(ctx.accounts.treasury_defai_ata.amount >= platform_fee, AppFactoryError::InsufficientCreatorBalance);
+
     // Refund from creator (minus platform fee)
     let creator_transfer_ctx = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),

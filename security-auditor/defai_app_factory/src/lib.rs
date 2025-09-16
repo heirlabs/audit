@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::System;
-use anchor_spl::token::Mint;
+use anchor_spl::token::{self as token, Mint, Token, SetAuthority};
+use anchor_spl::token::spl_token::instruction::AuthorityType;
 use solana_program::program_option::COption;
 
 mod purchase_app;
@@ -84,6 +85,35 @@ pub mod defai_app_factory {
         app_registration.metadata_uri = metadata_uri.clone();
         app_registration.created_at = Clock::get()?.unix_timestamp;
         app_registration.bump = ctx.bumps.app_registration;
+
+        // Transfer mint and freeze authority to the app_registration PDA atomically
+        {
+            let set_mint_auth_ctx = CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                SetAuthority {
+                    current_authority: ctx.accounts.creator.to_account_info(),
+                    account_or_mint: ctx.accounts.sft_mint.to_account_info(),
+                },
+            );
+            token::set_authority(
+                set_mint_auth_ctx,
+                AuthorityType::MintTokens,
+                Some(app_registration.key()),
+            )?;
+
+            let set_freeze_auth_ctx = CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                SetAuthority {
+                    current_authority: ctx.accounts.creator.to_account_info(),
+                    account_or_mint: ctx.accounts.sft_mint.to_account_info(),
+                },
+            );
+            token::set_authority(
+                set_freeze_auth_ctx,
+                AuthorityType::FreezeAccount,
+                Some(app_registration.key()),
+            )?;
+        }
 
         // Emit event
         emit!(AppRegistered {
@@ -185,6 +215,7 @@ pub mod defai_app_factory {
         user_app_access.app_id = app_id;
         user_app_access.sft_token_account = ctx.accounts.user_sft_ata.key();
         user_app_access.purchased_at = Clock::get()?.unix_timestamp;
+        user_app_access.purchase_price = price;
         user_app_access.bump = ctx.bumps.user_app_access;
 
         // Emit event
@@ -295,7 +326,6 @@ pub mod defai_app_factory {
     pub fn update_platform_settings(
         ctx: Context<UpdatePlatformSettings>,
         new_platform_fee_bps: Option<u16>,
-        new_treasury: Option<Pubkey>,
     ) -> Result<()> {
         let app_factory = &mut ctx.accounts.app_factory;
         
@@ -305,15 +335,15 @@ pub mod defai_app_factory {
             msg!("Platform fee updated to {}%", fee as f64 / 100.0);
         }
         
-        if let Some(treasury) = new_treasury {
-            app_factory.treasury = treasury;
-            msg!("Treasury updated to {}", treasury);
-        }
+        // Use the validated account from context
+        let new_treasury_key = ctx.accounts.new_treasury.key();
+        app_factory.treasury = new_treasury_key;
+        msg!("Treasury updated to {}", new_treasury_key);
         
         // Emit event
         emit!(PlatformSettingsUpdated {
             platform_fee_bps: new_platform_fee_bps,
-            treasury: new_treasury,
+            treasury: Some(app_factory.treasury),
             timestamp: Clock::get()?.unix_timestamp,
         });
         
@@ -426,11 +456,12 @@ pub struct UserAppAccess {
     pub app_id: u64,                    // App they purchased
     pub sft_token_account: Pubkey,      // Their SFT token account
     pub purchased_at: i64,              // Purchase timestamp
+    pub purchase_price: u64,            // Price at purchase time
     pub bump: u8,                       // PDA bump seed
 }
 
 impl UserAppAccess {
-    pub const LEN: usize = 8 + 32 + 8 + 32 + 8 + 1;
+    pub const LEN: usize = 8 + 32 + 8 + 32 + 8 + 8 + 1;
 }
 
 // ============================================================================
@@ -495,9 +526,9 @@ pub struct RegisterApp<'info> {
     pub app_registration: Account<'info, AppRegistration>,
     
     #[account(
-        constraint = sft_mint.mint_authority == COption::Some(app_registration.key()) 
+        constraint = sft_mint.mint_authority == COption::Some(creator.key()) 
             @ AppFactoryError::InvalidMintAuthority,
-        constraint = sft_mint.freeze_authority == COption::Some(app_registration.key())
+        constraint = sft_mint.freeze_authority == COption::Some(creator.key())
             @ AppFactoryError::InvalidFreezeAuthority,
         constraint = sft_mint.supply == 0 
             @ AppFactoryError::MintAlreadyInUse,
@@ -510,6 +541,7 @@ pub struct RegisterApp<'info> {
     pub creator: Signer<'info>,
     
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
 }
 
 /*
@@ -621,6 +653,12 @@ pub struct UpdatePlatformSettings<'info> {
     pub app_factory: Account<'info, AppFactory>,
     
     pub authority: Signer<'info>,
+    /// CHECK: validated to be a system account
+    #[account(
+        constraint = new_treasury.owner == &System::id() 
+            @ AppFactoryError::InvalidTreasury
+    )]
+    pub new_treasury: UncheckedAccount<'info>,
 }
 
 // ============================================================================

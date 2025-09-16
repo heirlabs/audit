@@ -206,6 +206,13 @@ await program.methods.approveProposal(proposalId)
 await program.methods.executeProposal()
 ```
 
+### Emergency Force Unlock (Multisig)
+
+Security checks enforced:
+- Proposal must target the same estate
+- Executor must be the original proposer
+- Approvals must meet or exceed multisig.threshold
+
 ## Security Features
 
 1. **Dead Man's Switch**: Automatic inheritance after inactivity

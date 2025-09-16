@@ -45,16 +45,13 @@ pub struct SubmitReview<'info> {
 pub struct UpdateReview<'info> {
     #[account(
         mut,
-        seeds = [b"app_review", user.key().as_ref(), &app_id.to_le_bytes()],
+        seeds = [b"app_review", reviewer.key().as_ref(), &app_id.to_le_bytes()],
         bump = review.bump,
         has_one = reviewer @ AppFactoryError::UnauthorizedReviewer
     )]
     pub review: Account<'info, AppReview>,
     
-    #[account(address = review.reviewer)]
     pub reviewer: Signer<'info>,
-    
-    pub user: Signer<'info>,
 }
 
 #[event]

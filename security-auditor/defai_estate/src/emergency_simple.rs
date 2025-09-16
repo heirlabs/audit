@@ -46,6 +46,17 @@ pub struct ForceUnlockByMultisig<'info> {
         constraint = multisig.key() == estate.multisig.unwrap() @ EstateError::InvalidMultisig,
     )]
     pub multisig: Account<'info, crate::Multisig>,
+
+    #[account(
+        mut,
+        constraint = proposal.multisig == multisig.key() @ EstateError::InvalidProposal,
+        constraint = proposal.executed @ EstateError::ProposalNotExecuted,
+        constraint = matches!(proposal.action, crate::ProposalAction::EmergencyUnlock { .. }) @ EstateError::InvalidProposalType,
+        constraint = proposal.target_estate == estate.key() @ EstateError::InvalidProposalEstate,
+        constraint = proposal.proposer == executor.key() @ EstateError::ProposerNotExecutor,
+        constraint = proposal.approvals.len() >= multisig.threshold as usize @ EstateError::NotEnoughApprovals,
+    )]
+    pub proposal: Account<'info, crate::Proposal>,
 }
 
 pub fn emergency_lock_impl(
