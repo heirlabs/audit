@@ -70,6 +70,11 @@
           "name": "systemProgram",
           "isMut": false,
           "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -98,6 +103,26 @@
         {
           "name": "appRegistration",
           "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "defaiMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "treasury",
+          "isMut": false,
           "isSigner": false
         },
         {
@@ -131,17 +156,12 @@
           "isSigner": false
         },
         {
-          "name": "user",
-          "isMut": true,
-          "isSigner": true
-        },
-        {
-          "name": "defaiMint",
+          "name": "tokenProgram",
           "isMut": false,
           "isSigner": false
         },
         {
-          "name": "tokenProgram",
+          "name": "associatedTokenProgram",
           "isMut": false,
           "isSigner": false
         },
@@ -191,6 +211,11 @@
           "name": "authority",
           "isMut": false,
           "isSigner": true
+        },
+        {
+          "name": "newTreasury",
+          "isMut": false,
+          "isSigner": false
         }
       ],
       "args": [
@@ -198,12 +223,6 @@
           "name": "newPlatformFeeBps",
           "type": {
             "option": "u16"
-          }
-        },
-        {
-          "name": "newTreasury",
-          "type": {
-            "option": "publicKey"
           }
         }
       ]
@@ -463,11 +482,6 @@
           "name": "reviewer",
           "isMut": false,
           "isSigner": true
-        },
-        {
-          "name": "user",
-          "isMut": false,
-          "isSigner": true
         }
       ],
       "args": [
@@ -678,6 +692,10 @@
           {
             "name": "purchasedAt",
             "type": "i64"
+          },
+          {
+            "name": "purchasePrice",
+            "type": "u64"
           },
           {
             "name": "bump",

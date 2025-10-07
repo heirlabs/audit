@@ -1,0 +1,32 @@
+{
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "deployer": "0xfed5F8b3FcfB3c8E65E42EDb4abFda1513081E26",
+  "timestamp": "2025-10-07T13:49:02.857Z",
+  "contracts": {
+    "oldDefai": "0x143bB5907F6F69cEc597DA300f5979B536Dd0Bc3",
+    "defai": "0x86938D567E7c77393aF32eC0E774100d84186558",
+    "nft": "0x928AC6730A2A07D7D68F79b459E2256B38Ac0ecF",
+    "swap": "0x14D97E2FAB4Be5bC8B7D0cd76F395fB5e6Ca140e"
+  },
+  "configuration": {
+    "treasury": "0xfed5F8b3FcfB3c8E65E42EDb4abFda1513081E26",
+    "vrfCoordinator": "0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634",
+    "vrfKeyHash": "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c",
+    "vrfSubscriptionId": 1,
+    "tierPrices": [
+      "100.0 ETH",
+      "200.0 ETH",
+      "500.0 ETH",
+      "1000.0 ETH",
+      "2000.0 ETH"
+    ],
+    "tierSupplies": [
+      100,
+      200,
+      300,
+      400,
+      500
+    ]
+  }
+}

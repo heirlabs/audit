@@ -1,0 +1,17 @@
+{
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "deployer": "0x02C9e22e4cC04f1E44b06d0f445D8a8fA66e5c6C",
+  "timestamp": 1759845996322,
+  "sharedTokens": {
+    "OLD_DEFAI": "0x143bB5907F6F69cEc597DA300f5979B536Dd0Bc3",
+    "DEFAI": "0x86938D567E7c77393aF32eC0E774100d84186558",
+    "NFT": "0x928AC6730A2A07D7D68F79b459E2256B38Ac0ecF"
+  },
+  "contracts": {
+    "defaiStaking": {
+      "proxy": "0x09760F6877801eDadE5f2EA24Fc2438E8c8D86A7",
+      "implementation": "0x66174cD6E295f16e63b395744f452a82f05e8523"
+    }
+  }
+}

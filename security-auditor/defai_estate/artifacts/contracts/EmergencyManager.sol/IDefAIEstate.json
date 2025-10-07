@@ -1,0 +1,182 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IDefAIEstate",
+  "sourceName": "contracts/EmergencyManager.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "estateId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getEstate",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "estateId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "owner",
+              "type": "address"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "ownerEmailHash",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "lastActive",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "inactivityPeriod",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "gracePeriod",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalBeneficiaries",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "creationTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "estateValue",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isLocked",
+              "type": "bool"
+            },
+            {
+              "internalType": "bool",
+              "name": "isClaimable",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalRWAs",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "estateNumber",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "totalClaims",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "tradingEnabled",
+              "type": "bool"
+            },
+            {
+              "internalType": "address",
+              "name": "aiAgent",
+              "type": "address"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tradingStrategy",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "humanContribution",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "aiContribution",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tradingValue",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "tradingProfit",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "highWaterMark",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "humanShare",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "aiShare",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "stopLoss",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "emergencyDelayHours",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "emergencyWithdrawalInitiated",
+              "type": "bool"
+            },
+            {
+              "internalType": "uint256",
+              "name": "emergencyWithdrawalTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint256",
+              "name": "lastTradingUpdate",
+              "type": "uint256"
+            },
+            {
+              "internalType": "address",
+              "name": "multisig",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct IDefAIEstate.Estate",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

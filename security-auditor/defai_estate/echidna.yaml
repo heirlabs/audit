@@ -1,0 +1,50 @@
+# Echidna configuration for DefAI Estate fuzzing
+
+# Test mode
+testMode: assertion
+
+# Number of test sequences to run
+testLimit: 50000
+
+# Sequence length
+seqLen: 100
+
+# Contract to test
+contractName: FuzzTesting
+
+# Deployment configuration
+deployer: "0x10000"
+deployerBalance: "0xffffffffffffffffffff"
+
+# Sender addresses for testing
+sender: ["0x10000", "0x20000", "0x30000"]
+
+# Code coverage
+coverage: true
+
+# Corpus directory
+corpusDir: "corpus"
+
+# Prefix for test functions
+prefix: "echidna_"
+
+# Solc arguments
+solcArgs: "--optimize --optimize-runs 1"
+
+# Timeout
+timeout: 1800
+
+# Format
+format: text
+
+# Multi-ABI testing
+multi-abi: true
+
+# Allow FFI
+allowFFI: false
+
+# Stop on first failure
+stopOnFail: false
+
+# Shrink limit
+shrinkLimit: 5000

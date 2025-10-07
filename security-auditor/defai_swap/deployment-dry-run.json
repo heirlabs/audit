@@ -1,0 +1,34 @@
+{
+  "type": "DRY_RUN",
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "deployer": "0xB299c10EFB32472EaB14bf0fa949c50564Acf485",
+  "currentBalance": "0.0",
+  "timestamp": "2025-10-07T13:01:59.223Z",
+  "expectedContracts": {
+    "oldDefai": "0x63863EC3AD63DdFB0bd678c18B3e716C6667e542",
+    "defai": "0x37F361620108eB867f2A7C4D59aFe32f2aADDc24",
+    "nft": "0x30C6bb024c05F4a950A2Bfbf80b1b284681235b5",
+    "swap": "0x542DDe3C4956718B961CFDdA2a4C2A72c6d61811"
+  },
+  "configuration": {
+    "treasury": "0xB299c10EFB32472EaB14bf0fa949c50564Acf485",
+    "vrfCoordinator": "0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634",
+    "vrfKeyHash": "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c",
+    "tierPrices": [
+      "100",
+      "200",
+      "500",
+      "1000",
+      "2000"
+    ],
+    "tierSupplies": [
+      100,
+      200,
+      300,
+      400,
+      500
+    ]
+  },
+  "estimatedGasCost": "0.01 ETH"
+}

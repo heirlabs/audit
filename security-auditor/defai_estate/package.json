@@ -1,0 +1,62 @@
+{
+  "name": "defai-estate-evm",
+  "version": "1.0.0",
+  "description": "DefAI Estate smart contracts for EVM chains",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage",
+    "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:goerli": "hardhat run scripts/deploy.js --network goerli",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network mainnet",
+    "deploy:polygon": "hardhat run scripts/deploy.js --network polygon",
+    "deploy:mumbai": "hardhat run scripts/deploy.js --network mumbai",
+    "deploy:bsc": "hardhat run scripts/deploy.js --network bsc",
+    "deploy:bsc-testnet": "hardhat run scripts/deploy.js --network bscTestnet",
+    "deploy:avalanche": "hardhat run scripts/deploy.js --network avalanche",
+    "deploy:fuji": "hardhat run scripts/deploy.js --network fuji",
+    "deploy:arbitrum": "hardhat run scripts/deploy.js --network arbitrum",
+    "deploy:arbitrum-goerli": "hardhat run scripts/deploy.js --network arbitrumGoerli",
+    "deploy:optimism": "hardhat run scripts/deploy.js --network optimism",
+    "deploy:optimism-goerli": "hardhat run scripts/deploy.js --network optimismGoerli",
+    "deploy:base-sepolia": "hardhat run scripts/deploy.js --network baseSepolia",
+    "node": "hardhat node",
+    "clean": "hardhat clean",
+    "flatten": "hardhat flatten",
+    "verify": "hardhat verify"
+  },
+  "keywords": [
+    "estate",
+    "inheritance",
+    "defi",
+    "solidity",
+    "ethereum",
+    "smart-contracts"
+  ],
+  "author": "DefAI Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@openzeppelin/contracts-upgradeable": "^4.9.6",
+    "@openzeppelin/hardhat-upgrades": "^1.28.0",
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.4.5",
+    "chai": "^4.3.7",
+    "dotenv": "^16.3.1",
+    "ethereum-waffle": "^4.0.10",
+    "ethers": "^5.7.2",
+    "hardhat": "^2.17.1",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.3"
+  }
+}
