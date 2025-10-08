@@ -45,5 +45,8 @@
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.3",
     "dotenv": "^17.2.3"
+  },
+  "directories": {
+    "test": "tests"
   }
 }

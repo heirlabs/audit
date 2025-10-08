@@ -1,0 +1,418 @@
+;; DefAI Treasury and Multisig Contract for TON
+;; Handles platform fees, multisig proposals, and emergency functions
+
+#include "stdlib.fc";
+
+;; Constants
+const int PLATFORM_FEE_BPS = 250; ;; 2.5% platform fee
+const int MIN_THRESHOLD = 2;
+const int MAX_SIGNERS = 10;
+const int PROPOSAL_EXPIRY = 604800; ;; 7 days
+const int ADMIN_TIMELOCK = 172800; ;; 48 hours
+
+;; Operation codes
+const int op::init_treasury = 0x2001;
+const int op::collect_fees = 0x2002;
+const int op::create_proposal = 0x2003;
+const int op::approve_proposal = 0x2004;
+const int op::execute_proposal = 0x2005;
+const int op::cancel_proposal = 0x2006;
+const int op::update_signers = 0x2007;
+const int op::emergency_pause = 0x2008;
+const int op::emergency_resume = 0x2009;
+const int op::withdraw_treasury = 0x200a;
+const int op::update_fee = 0x200b;
+const int op::propose_admin = 0x200c;
+const int op::accept_admin = 0x200d;
+
+;; Proposal types
+const int PROPOSAL_WITHDRAW = 1;
+const int PROPOSAL_UPDATE_SIGNERS = 2;
+const int PROPOSAL_UPDATE_FEE = 3;
+const int PROPOSAL_EMERGENCY = 4;
+const int PROPOSAL_UPDATE_ESTATE = 5;
+
+;; Error codes
+const int error::unauthorized = 501;
+const int error::invalid_threshold = 502;
+const int error::invalid_signers = 503;
+const int error::proposal_expired = 504;
+const int error::already_approved = 505;
+const int error::proposal_executed = 506;
+const int error::insufficient_approvals = 507;
+const int error::timelock_active = 508;
+const int error::no_pending_admin = 509;
+const int error::paused = 510;
+const int error::duplicate_signer = 511;
+
+;; Storage layout
+;; treasury_data: [admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused]
+;; multisig_data: [threshold, signer_count, proposal_count]
+;; signers: dict<address, bool>
+;; proposals: dict<id, [proposer, type, target, amount, approvals, executed, created_at, data]>
+;; estate_registry: dict<estate_id, estate_address>
+
+;; Load treasury data
+(slice, slice, int, int, int, int) load_treasury_data() inline {
+    var ds = get_data().begin_parse();
+    var admin = ds~load_msg_addr();
+    var pending_admin = ds~load_msg_addr();
+    var admin_timelock = ds~load_uint(64);
+    var total_collected = ds~load_coins();
+    var platform_fee_bps = ds~load_uint(16);
+    var paused = ds~load_uint(1);
+    return (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused);
+}
+
+;; Load multisig data
+(int, int, int, cell, cell, cell) load_multisig_data() inline {
+    var ds = get_data().begin_parse();
+    ds~skip_bits(267 + 120 + 16 + 1); ;; Skip treasury data
+    var threshold = ds~load_uint(8);
+    var signer_count = ds~load_uint(8);
+    var proposal_count = ds~load_uint(32);
+    var signers = ds~load_dict();
+    var proposals = ds~load_dict();
+    var estate_registry = ds~load_dict();
+    return (threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Save all data
+() save_data(slice admin, slice pending_admin, int admin_timelock, int total_collected,
+             int platform_fee_bps, int paused, int threshold, int signer_count,
+             int proposal_count, cell signers, cell proposals, cell estate_registry) impure {
+    set_data(begin_cell()
+        .store_slice(admin)
+        .store_slice(pending_admin)
+        .store_uint(admin_timelock, 64)
+        .store_coins(total_collected)
+        .store_uint(platform_fee_bps, 16)
+        .store_uint(paused, 1)
+        .store_uint(threshold, 8)
+        .store_uint(signer_count, 8)
+        .store_uint(proposal_count, 32)
+        .store_dict(signers)
+        .store_dict(proposals)
+        .store_dict(estate_registry)
+        .end_cell());
+}
+
+;; Check if address is a signer
+int is_signer(cell signers, slice addr) inline {
+    var (value, found) = signers.udict_get?(256, addr.preload_uint(256));
+    return found;
+}
+
+;; Initialize treasury
+() init_treasury(slice admin, cell initial_signers, int threshold) impure {
+    throw_unless(error::invalid_threshold, 
+        (threshold >= MIN_THRESHOLD) & (threshold <= MAX_SIGNERS));
+    
+    var signer_count = 0;
+    var signers = new_dict();
+    var empty_addr = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+    
+    ;; Add signers from list
+    var cs = initial_signers.begin_parse();
+    while (~ cs.slice_empty?()) {
+        var signer = cs~load_msg_addr();
+        throw_if(error::duplicate_signer, 
+            signers.udict_get?(256, signer.preload_uint(256)));
+        signers~udict_set(256, signer.preload_uint(256), 
+                         begin_cell().store_uint(1, 1).end_cell().begin_parse());
+        signer_count += 1;
+    }
+    
+    throw_unless(error::invalid_signers,
+        (signer_count >= threshold) & (signer_count <= MAX_SIGNERS));
+    
+    save_data(admin, empty_addr, 0, 0, PLATFORM_FEE_BPS, 0, threshold, signer_count,
+              0, signers, new_dict(), new_dict());
+}
+
+;; Collect fees from estate
+() collect_fees(int estate_id, int amount) impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    throw_if(error::paused, paused);
+    
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    ;; Calculate platform fee
+    var fee = muldiv(amount, platform_fee_bps, 10000);
+    total_collected += fee;
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Create proposal
+() create_proposal(slice proposer, int proposal_type, slice target, int amount, cell data) impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    throw_unless(error::unauthorized, is_signer(signers, proposer));
+    throw_if(error::paused, paused);
+    
+    ;; Create proposal data
+    var proposal = begin_cell()
+        .store_slice(proposer)
+        .store_uint(proposal_type, 8)
+        .store_slice(target)
+        .store_coins(amount)
+        .store_uint(1, 8) ;; Initial approval count (proposer)
+        .store_uint(0, 1) ;; Not executed
+        .store_uint(now(), 64) ;; Created at
+        .store_ref(data)
+        .end_cell();
+    
+    ;; Add approval from proposer
+    var approvals = new_dict();
+    approvals~udict_set(256, proposer.preload_uint(256),
+                       begin_cell().store_uint(1, 1).end_cell().begin_parse());
+    
+    ;; Store proposal with approvals
+    var full_proposal = begin_cell()
+        .store_ref(proposal)
+        .store_dict(approvals)
+        .end_cell();
+    
+    proposals~udict_set(32, proposal_count, full_proposal.begin_parse());
+    proposal_count += 1;
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Approve proposal
+() approve_proposal(slice approver, int proposal_id) impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    throw_unless(error::unauthorized, is_signer(signers, approver));
+    
+    ;; Get proposal
+    var (proposal_slice, found) = proposals.udict_get?(32, proposal_id);
+    throw_unless(error::unauthorized, found);
+    
+    var full_proposal = proposal_slice~load_ref();
+    var ps = full_proposal.begin_parse();
+    var proposer = ps~load_msg_addr();
+    var proposal_type = ps~load_uint(8);
+    var target = ps~load_msg_addr();
+    var amount = ps~load_coins();
+    var approval_count = ps~load_uint(8);
+    var executed = ps~load_uint(1);
+    var created_at = ps~load_uint(64);
+    var data = ps~load_ref();
+    
+    throw_if(error::proposal_executed, executed);
+    throw_if(error::proposal_expired, now() > created_at + PROPOSAL_EXPIRY);
+    
+    ;; Load approvals dict
+    var approvals = proposal_slice~load_dict();
+    
+    ;; Check if already approved
+    var (_, already_approved) = approvals.udict_get?(256, approver.preload_uint(256));
+    throw_if(error::already_approved, already_approved);
+    
+    ;; Add approval
+    approvals~udict_set(256, approver.preload_uint(256),
+                       begin_cell().store_uint(1, 1).end_cell().begin_parse());
+    approval_count += 1;
+    
+    ;; Update proposal
+    var updated_proposal = begin_cell()
+        .store_slice(proposer)
+        .store_uint(proposal_type, 8)
+        .store_slice(target)
+        .store_coins(amount)
+        .store_uint(approval_count, 8)
+        .store_uint(executed, 1)
+        .store_uint(created_at, 64)
+        .store_ref(data)
+        .end_cell();
+    
+    var full_updated = begin_cell()
+        .store_ref(updated_proposal)
+        .store_dict(approvals)
+        .end_cell();
+    
+    proposals~udict_set(32, proposal_id, full_updated.begin_parse());
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Execute proposal
+() execute_proposal(int proposal_id) impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    ;; Get proposal
+    var (proposal_slice, found) = proposals.udict_get?(32, proposal_id);
+    throw_unless(error::unauthorized, found);
+    
+    var full_proposal = proposal_slice~load_ref();
+    var ps = full_proposal.begin_parse();
+    var proposer = ps~load_msg_addr();
+    var proposal_type = ps~load_uint(8);
+    var target = ps~load_msg_addr();
+    var amount = ps~load_coins();
+    var approval_count = ps~load_uint(8);
+    var executed = ps~load_uint(1);
+    var created_at = ps~load_uint(64);
+    var data = ps~load_ref();
+    
+    throw_if(error::proposal_executed, executed);
+    throw_if(error::proposal_expired, now() > created_at + PROPOSAL_EXPIRY);
+    throw_unless(error::insufficient_approvals, approval_count >= threshold);
+    
+    ;; Execute based on proposal type
+    if (proposal_type == PROPOSAL_WITHDRAW) {
+        ;; Send funds to target
+        var msg = begin_cell()
+            .store_uint(0x10, 6)
+            .store_slice(target)
+            .store_coins(amount)
+            .store_uint(0, 107)
+            .end_cell();
+        send_raw_message(msg, 1);
+    }
+    elseif (proposal_type == PROPOSAL_UPDATE_FEE) {
+        var new_fee = data.begin_parse()~load_uint(16);
+        platform_fee_bps = new_fee;
+    }
+    elseif (proposal_type == PROPOSAL_UPDATE_SIGNERS) {
+        var ds = data.begin_parse();
+        var new_threshold = ds~load_uint(8);
+        var new_signers = ds~load_dict();
+        threshold = new_threshold;
+        signers = new_signers;
+    }
+    elseif (proposal_type == PROPOSAL_EMERGENCY) {
+        paused = data.begin_parse()~load_uint(1);
+    }
+    
+    ;; Mark as executed
+    executed = 1;
+    var updated_proposal = begin_cell()
+        .store_slice(proposer)
+        .store_uint(proposal_type, 8)
+        .store_slice(target)
+        .store_coins(amount)
+        .store_uint(approval_count, 8)
+        .store_uint(executed, 1)
+        .store_uint(created_at, 64)
+        .store_ref(data)
+        .end_cell();
+    
+    var approvals = proposal_slice~load_dict();
+    var full_updated = begin_cell()
+        .store_ref(updated_proposal)
+        .store_dict(approvals)
+        .end_cell();
+    
+    proposals~udict_set(32, proposal_id, full_updated.begin_parse());
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Propose admin change
+() propose_admin_change(slice current_admin, slice new_admin) impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    throw_unless(error::unauthorized, equal_slices(current_admin, admin));
+    
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    pending_admin = new_admin;
+    admin_timelock = now() + ADMIN_TIMELOCK;
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Accept admin change
+() accept_admin_change() impure {
+    var (admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    
+    throw_if(error::no_pending_admin, pending_admin.slice_bits() == 0);
+    throw_unless(error::timelock_active, now() >= admin_timelock);
+    
+    var (threshold, signer_count, proposal_count, signers, proposals, estate_registry) = load_multisig_data();
+    
+    admin = pending_admin;
+    pending_admin = begin_cell().store_uint(0, 2).end_cell().begin_parse();
+    admin_timelock = 0;
+    
+    save_data(admin, pending_admin, admin_timelock, total_collected, platform_fee_bps, paused,
+              threshold, signer_count, proposal_count, signers, proposals, estate_registry);
+}
+
+;; Main message handler
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) {
+        return ();
+    }
+    
+    var cs = in_msg_full.begin_parse();
+    var flags = cs~load_uint(4);
+    
+    if (flags & 1) {
+        return ();
+    }
+    
+    var sender = cs~load_msg_addr();
+    var op = in_msg_body~load_uint(32);
+    var query_id = in_msg_body~load_uint(64);
+    
+    if (op == op::init_treasury) {
+        var admin = in_msg_body~load_msg_addr();
+        var signers_cell = in_msg_body~load_ref();
+        var threshold = in_msg_body~load_uint(8);
+        init_treasury(admin, signers_cell, threshold);
+    }
+    elseif (op == op::collect_fees) {
+        var estate_id = in_msg_body~load_uint(256);
+        collect_fees(estate_id, msg_value);
+    }
+    elseif (op == op::create_proposal) {
+        var proposal_type = in_msg_body~load_uint(8);
+        var target = in_msg_body~load_msg_addr();
+        var amount = in_msg_body~load_coins();
+        var data = in_msg_body~load_ref();
+        create_proposal(sender, proposal_type, target, amount, data);
+    }
+    elseif (op == op::approve_proposal) {
+        var proposal_id = in_msg_body~load_uint(32);
+        approve_proposal(sender, proposal_id);
+    }
+    elseif (op == op::execute_proposal) {
+        var proposal_id = in_msg_body~load_uint(32);
+        execute_proposal(proposal_id);
+    }
+    elseif (op == op::propose_admin) {
+        var new_admin = in_msg_body~load_msg_addr();
+        propose_admin_change(sender, new_admin);
+    }
+    elseif (op == op::accept_admin) {
+        accept_admin_change();
+    }
+}
+
+;; Get methods
+(int, int, int, int) get_treasury_info() method_id {
+    var (admin, _, _, total_collected, platform_fee_bps, paused) = load_treasury_data();
+    var (threshold, signer_count, proposal_count, _, _, _) = load_multisig_data();
+    return (total_collected, platform_fee_bps, paused, proposal_count);
+}
+
+(int, int, int) get_multisig_info() method_id {
+    var (threshold, signer_count, proposal_count, _, _, _) = load_multisig_data();
+    return (threshold, signer_count, proposal_count);
+}
+
+(int) is_signer_method(slice addr) method_id {
+    var (_, _, _, signers, _, _) = load_multisig_data();
+    return is_signer(signers, addr);
+}

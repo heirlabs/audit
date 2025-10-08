@@ -1,0 +1,450 @@
+;; DefAI Estate Smart Contract for TON Blockchain
+;; Transpiled from Solana Rust implementation
+
+#include "stdlib.fc";
+
+;; Constants
+const int MIN_INACTIVITY_PERIOD = 86400; ;; 24 hours in seconds
+const int MAX_INACTIVITY_PERIOD = 9467280000; ;; 300 years in seconds  
+const int MIN_GRACE_PERIOD = 86400; ;; 24 hours
+const int MAX_GRACE_PERIOD = 7776000; ;; 90 days
+const int MAX_BENEFICIARIES = 10;
+const int ESTATE_FEE = 100000000; ;; 0.1 TON in nanotons
+const int RWA_FEE = 10000000; ;; 0.01 TON
+const int MIN_EMERGENCY_DELAY = 24; ;; hours
+const int MAX_EMERGENCY_DELAY = 168; ;; 7 days
+const int MAX_PROFIT_SHARE = 50; ;; percent
+const int ADMIN_TIMELOCK_DURATION = 172800; ;; 48 hours
+
+;; Operation codes
+const int op::create_estate = 0x1001;
+const int op::add_beneficiary = 0x1002;
+const int op::remove_beneficiary = 0x1003;
+const int op::update_activity = 0x1004;
+const int op::claim_estate = 0x1005;
+const int op::add_rwa = 0x1006;
+const int op::enable_trading = 0x1007;
+const int op::pause_trading = 0x1008;
+const int op::resume_trading = 0x1009;
+const int op::deposit_funds = 0x100a;
+const int op::withdraw_funds = 0x100b;
+const int op::emergency_withdraw = 0x100c;
+const int op::update_trading = 0x100d;
+const int op::init_multisig = 0x100e;
+const int op::create_proposal = 0x100f;
+const int op::approve_proposal = 0x1010;
+const int op::execute_proposal = 0x1011;
+const int op::update_risk = 0x1012;
+
+;; Trading strategies
+const int STRATEGY_CONSERVATIVE = 0;
+const int STRATEGY_BALANCED = 1;
+const int STRATEGY_AGGRESSIVE = 2;
+
+;; Proposal actions
+const int ACTION_WITHDRAW = 0;
+const int ACTION_UPDATE_BENEFICIARIES = 1;
+const int ACTION_EMERGENCY_UNLOCK = 2;
+const int ACTION_UPDATE_SETTINGS = 3;
+
+;; Error codes
+const int error::unauthorized = 401;
+const int error::invalid_period = 402;
+const int error::estate_locked = 403;
+const int error::estate_claimable = 404;
+const int error::trading_enabled = 405;
+const int error::trading_not_enabled = 406;
+const int error::invalid_share = 407;
+const int error::invalid_delay = 408;
+const int error::insufficient_funds = 409;
+const int error::max_beneficiaries = 410;
+const int error::invalid_threshold = 411;
+const int error::already_approved = 412;
+const int error::proposal_executed = 413;
+const int error::insufficient_approvals = 414;
+const int error::timelock_not_expired = 415;
+const int error::invalid_signer_count = 416;
+const int error::duplicate_signer = 417;
+
+;; Storage layout
+;; estate_data: [owner, estate_id, last_active, inactivity_period, grace_period,
+;;               creation_time, estate_value, flags, estate_number, total_rwas, total_claims]
+;; beneficiaries: dict<address, share>
+;; trading_data: [ai_agent, strategy, human_share, ai_share, stop_loss,
+;;                emergency_delay, human_contribution, ai_contribution,
+;;                trading_value, trading_profit, high_water_mark,
+;;                emergency_withdrawal_time, last_trading_update]
+;; multisig_data: [admin, pending_admin, admin_change_timestamp, threshold, proposal_count]
+;; signers: dict<address, bool>
+;; proposals: dict<proposal_id, proposal_data>
+;; risk_settings: [max_position_size, max_daily_loss, max_leverage, min_liquidity,
+;;                 max_slippage, position_timeout]
+
+;; Load estate data
+(slice, slice, int, int, int, int, int, int, int, int, int) load_estate_data() inline {
+    var ds = get_data().begin_parse();
+    var owner = ds~load_msg_addr();
+    var estate_id = ds~load_uint(256);
+    var last_active = ds~load_uint(64);
+    var inactivity_period = ds~load_uint(64);
+    var grace_period = ds~load_uint(64);
+    var creation_time = ds~load_uint(64);
+    var estate_value = ds~load_coins();
+    var flags = ds~load_uint(8);
+    var estate_number = ds~load_uint(64);
+    var total_rwas = ds~load_uint(32);
+    var total_claims = ds~load_uint(32);
+    return (owner, estate_id, last_active, inactivity_period, grace_period,
+            creation_time, estate_value, flags, estate_number, total_rwas, total_claims);
+}
+
+;; Save estate data
+() save_estate_data(slice owner, int estate_id, int last_active, int inactivity_period,
+                     int grace_period, int creation_time, int estate_value, int flags,
+                     int estate_number, int total_rwas, int total_claims, cell beneficiaries,
+                     cell trading_data, cell multisig_data, cell risk_settings) impure {
+    set_data(begin_cell()
+        .store_slice(owner)
+        .store_uint(estate_id, 256)
+        .store_uint(last_active, 64)
+        .store_uint(inactivity_period, 64)
+        .store_uint(grace_period, 64)
+        .store_uint(creation_time, 64)
+        .store_coins(estate_value)
+        .store_uint(flags, 8)
+        .store_uint(estate_number, 64)
+        .store_uint(total_rwas, 32)
+        .store_uint(total_claims, 32)
+        .store_dict(beneficiaries)
+        .store_dict(trading_data)
+        .store_dict(multisig_data)
+        .store_dict(risk_settings)
+        .end_cell());
+}
+
+;; Check if estate is claimable
+int is_estate_claimable(int last_active, int inactivity_period, int grace_period) inline {
+    var current_time = now();
+    return current_time > (last_active + inactivity_period + grace_period);
+}
+
+;; Initialize estate
+() create_estate(slice owner, int inactivity_period, int grace_period, int estate_number) impure {
+    throw_unless(error::invalid_period, 
+        (inactivity_period >= MIN_INACTIVITY_PERIOD) & 
+        (inactivity_period <= MAX_INACTIVITY_PERIOD));
+    throw_unless(error::invalid_period,
+        (grace_period >= MIN_GRACE_PERIOD) &
+        (grace_period <= MAX_GRACE_PERIOD));
+    
+    var estate_id = randomize_lt();
+    var current_time = now();
+    
+    save_estate_data(owner, estate_id, current_time, inactivity_period, grace_period,
+                     current_time, 0, 0, estate_number, 0, 0,
+                     new_dict(), new_dict(), new_dict(), new_dict());
+}
+
+;; Add beneficiary
+() add_beneficiary(slice owner, slice beneficiary, int share) impure {
+    var (estate_owner, estate_id, last_active, inactivity_period, grace_period,
+         creation_time, estate_value, flags, estate_number, total_rwas, total_claims) = load_estate_data();
+    
+    throw_unless(error::unauthorized, equal_slices(owner, estate_owner));
+    throw_unless(error::estate_locked, flags & 1 == 0);
+    throw_unless(error::estate_claimable, flags & 2 == 0);
+    
+    var ds = get_data().begin_parse();
+    ds~skip_bits(2048); ;; Skip estate data
+    var beneficiaries = ds~load_dict();
+    
+    var beneficiary_count = 0;
+    var total_shares = share;
+    
+    ;; Count existing beneficiaries and sum shares
+    var key = -1;
+    do {
+        (key, var value, var found) = beneficiaries.udict_get_next?(256, key);
+        if (found) {
+            beneficiary_count += 1;
+            total_shares += value~load_uint(32);
+        }
+    } until (~ found);
+    
+    throw_unless(error::max_beneficiaries, beneficiary_count < MAX_BENEFICIARIES);
+    throw_unless(error::invalid_share, total_shares <= 10000); ;; 100% in basis points
+    
+    beneficiaries~udict_set(256, beneficiary.preload_uint(256), 
+                            begin_cell().store_uint(share, 32).end_cell().begin_parse());
+    
+    var trading_data = ds~load_dict();
+    var multisig_data = ds~load_dict();
+    var risk_settings = ds~load_dict();
+    
+    save_estate_data(estate_owner, estate_id, last_active, inactivity_period, grace_period,
+                     creation_time, estate_value, flags, estate_number, total_rwas, total_claims,
+                     beneficiaries, trading_data, multisig_data, risk_settings);
+}
+
+;; Enable trading
+() enable_trading(slice owner, slice ai_agent, int human_share, int strategy,
+                  int stop_loss, int emergency_delay_hours) impure {
+    var (estate_owner, estate_id, last_active, inactivity_period, grace_period,
+         creation_time, estate_value, flags, estate_number, total_rwas, total_claims) = load_estate_data();
+    
+    throw_unless(error::unauthorized, equal_slices(owner, estate_owner));
+    throw_unless(error::estate_locked, flags & 1 == 0);
+    throw_unless(error::estate_claimable, flags & 2 == 0);
+    throw_unless(error::trading_enabled, flags & 4 == 0);
+    throw_unless(error::invalid_share, (human_share >= 50) & (human_share <= 100));
+    throw_unless(error::invalid_delay,
+        (emergency_delay_hours >= MIN_EMERGENCY_DELAY) &
+        (emergency_delay_hours <= MAX_EMERGENCY_DELAY));
+    
+    flags |= 4; ;; Set trading_enabled flag
+    
+    var ds = get_data().begin_parse();
+    ds~skip_bits(2048); ;; Skip estate data
+    var beneficiaries = ds~load_dict();
+    
+    ;; Create trading data
+    var trading_data = begin_cell()
+        .store_slice(ai_agent)
+        .store_uint(strategy, 8)
+        .store_uint(human_share, 8)
+        .store_uint(100 - human_share, 8) ;; ai_share
+        .store_uint(stop_loss, 8)
+        .store_uint(emergency_delay_hours, 32)
+        .store_coins(0) ;; human_contribution
+        .store_coins(0) ;; ai_contribution
+        .store_coins(0) ;; trading_value
+        .store_coins(0) ;; trading_profit
+        .store_coins(0) ;; high_water_mark
+        .store_uint(0, 64) ;; emergency_withdrawal_time
+        .store_uint(now(), 64) ;; last_trading_update
+        .end_cell();
+    
+    var multisig_data = ds~load_dict();
+    
+    ;; Set default risk settings based on strategy
+    var risk_settings = new_dict();
+    if (strategy == STRATEGY_CONSERVATIVE) {
+        risk_settings = begin_cell()
+            .store_uint(1000, 32) ;; max_position_size: 10% in basis points
+            .store_uint(200, 32)  ;; max_daily_loss: 2%
+            .store_uint(100, 32)  ;; max_leverage: 1x (100%)
+            .store_uint(8000, 32) ;; min_liquidity: 80%
+            .store_uint(50, 32)   ;; max_slippage: 0.5%
+            .store_uint(86400, 32) ;; position_timeout: 24 hours
+            .end_cell();
+    } elseif (strategy == STRATEGY_BALANCED) {
+        risk_settings = begin_cell()
+            .store_uint(2500, 32) ;; max_position_size: 25%
+            .store_uint(500, 32)  ;; max_daily_loss: 5%
+            .store_uint(300, 32)  ;; max_leverage: 3x
+            .store_uint(5000, 32) ;; min_liquidity: 50%
+            .store_uint(100, 32)  ;; max_slippage: 1%
+            .store_uint(43200, 32) ;; position_timeout: 12 hours
+            .end_cell();
+    } else { ;; AGGRESSIVE
+        risk_settings = begin_cell()
+            .store_uint(5000, 32) ;; max_position_size: 50%
+            .store_uint(1000, 32) ;; max_daily_loss: 10%
+            .store_uint(500, 32)  ;; max_leverage: 5x
+            .store_uint(2000, 32) ;; min_liquidity: 20%
+            .store_uint(200, 32)  ;; max_slippage: 2%
+            .store_uint(21600, 32) ;; position_timeout: 6 hours
+            .end_cell();
+    }
+    
+    save_estate_data(estate_owner, estate_id, last_active, inactivity_period, grace_period,
+                     creation_time, estate_value, flags, estate_number, total_rwas, total_claims,
+                     beneficiaries, trading_data, multisig_data, risk_settings);
+}
+
+;; Deposit funds to estate
+() deposit_funds(slice sender, int amount) impure {
+    var (estate_owner, estate_id, last_active, inactivity_period, grace_period,
+         creation_time, estate_value, flags, estate_number, total_rwas, total_claims) = load_estate_data();
+    
+    throw_unless(error::estate_locked, flags & 1 == 0);
+    
+    var ds = get_data().begin_parse();
+    ds~skip_bits(2048); ;; Skip estate data
+    var beneficiaries = ds~load_dict();
+    var trading_data = ds~load_dict();
+    var multisig_data = ds~load_dict();
+    var risk_settings = ds~load_dict();
+    
+    ;; Update estate value
+    estate_value += amount;
+    
+    ;; If trading is enabled, update trading values
+    if (flags & 4) {
+        var tds = trading_data.begin_parse();
+        var ai_agent = tds~load_msg_addr();
+        var strategy = tds~load_uint(8);
+        var human_share = tds~load_uint(8);
+        var ai_share = tds~load_uint(8);
+        var stop_loss = tds~load_uint(8);
+        var emergency_delay = tds~load_uint(32);
+        var human_contribution = tds~load_coins();
+        var ai_contribution = tds~load_coins();
+        var trading_value = tds~load_coins();
+        
+        ;; Check if deposit is from AI agent or human
+        if (equal_slices(sender, ai_agent)) {
+            ai_contribution += amount;
+        } else {
+            human_contribution += amount;
+        }
+        trading_value += amount;
+        
+        ;; Rebuild trading data with updated values
+        trading_data = begin_cell()
+            .store_slice(ai_agent)
+            .store_uint(strategy, 8)
+            .store_uint(human_share, 8)
+            .store_uint(ai_share, 8)
+            .store_uint(stop_loss, 8)
+            .store_uint(emergency_delay, 32)
+            .store_coins(human_contribution)
+            .store_coins(ai_contribution)
+            .store_coins(trading_value)
+            .store_slice(tds) ;; Copy remaining data
+            .end_cell();
+    }
+    
+    save_estate_data(estate_owner, estate_id, last_active, inactivity_period, grace_period,
+                     creation_time, estate_value, flags, estate_number, total_rwas, total_claims,
+                     beneficiaries, trading_data, multisig_data, risk_settings);
+}
+
+;; Withdraw funds (for beneficiaries after claim)
+() withdraw_funds(slice beneficiary, int amount) impure {
+    var (estate_owner, estate_id, last_active, inactivity_period, grace_period,
+         creation_time, estate_value, flags, estate_number, total_rwas, total_claims) = load_estate_data();
+    
+    ;; Check if estate is claimable
+    throw_unless(error::estate_claimable, 
+        is_estate_claimable(last_active, inactivity_period, grace_period));
+    
+    throw_unless(error::insufficient_funds, estate_value >= amount);
+    
+    var ds = get_data().begin_parse();
+    ds~skip_bits(2048); ;; Skip estate data
+    var beneficiaries = ds~load_dict();
+    
+    ;; Check if beneficiary exists and get their share
+    var (value, found) = beneficiaries.udict_get?(256, beneficiary.preload_uint(256));
+    throw_unless(error::unauthorized, found);
+    
+    var share = value~load_uint(32);
+    var max_withdrawal = muldiv(estate_value, share, 10000);
+    throw_unless(error::insufficient_funds, amount <= max_withdrawal);
+    
+    ;; Update estate value
+    estate_value -= amount;
+    
+    ;; Send funds to beneficiary
+    var msg = begin_cell()
+        .store_uint(0x10, 6)
+        .store_slice(beneficiary)
+        .store_coins(amount)
+        .store_uint(0, 107)
+        .end_cell();
+    send_raw_message(msg, 1);
+    
+    var trading_data = ds~load_dict();
+    var multisig_data = ds~load_dict();
+    var risk_settings = ds~load_dict();
+    
+    save_estate_data(estate_owner, estate_id, last_active, inactivity_period, grace_period,
+                     creation_time, estate_value, flags, estate_number, total_rwas, total_claims,
+                     beneficiaries, trading_data, multisig_data, risk_settings);
+}
+
+;; Main message handler
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) {
+        return ();
+    }
+    
+    var cs = in_msg_full.begin_parse();
+    var flags = cs~load_uint(4);
+    
+    if (flags & 1) { ;; Bounced message
+        return ();
+    }
+    
+    var sender = cs~load_msg_addr();
+    var op = in_msg_body~load_uint(32);
+    var query_id = in_msg_body~load_uint(64);
+    
+    if (op == op::create_estate) {
+        var inactivity_period = in_msg_body~load_uint(64);
+        var grace_period = in_msg_body~load_uint(64);
+        var estate_number = in_msg_body~load_uint(64);
+        create_estate(sender, inactivity_period, grace_period, estate_number);
+    }
+    elseif (op == op::add_beneficiary) {
+        var beneficiary = in_msg_body~load_msg_addr();
+        var share = in_msg_body~load_uint(32);
+        add_beneficiary(sender, beneficiary, share);
+    }
+    elseif (op == op::enable_trading) {
+        var ai_agent = in_msg_body~load_msg_addr();
+        var human_share = in_msg_body~load_uint(8);
+        var strategy = in_msg_body~load_uint(8);
+        var stop_loss = in_msg_body~load_uint(8);
+        var emergency_delay = in_msg_body~load_uint(32);
+        enable_trading(sender, ai_agent, human_share, strategy, stop_loss, emergency_delay);
+    }
+    elseif (op == op::deposit_funds) {
+        deposit_funds(sender, msg_value);
+    }
+    elseif (op == op::withdraw_funds) {
+        var amount = in_msg_body~load_coins();
+        withdraw_funds(sender, amount);
+    }
+    elseif (op == op::update_activity) {
+        var (estate_owner, estate_id, _, inactivity_period, grace_period,
+             creation_time, estate_value, flags, estate_number, total_rwas, total_claims) = load_estate_data();
+        throw_unless(error::unauthorized, equal_slices(sender, estate_owner));
+        
+        var ds = get_data().begin_parse();
+        ds~skip_bits(2048);
+        var beneficiaries = ds~load_dict();
+        var trading_data = ds~load_dict();
+        var multisig_data = ds~load_dict();
+        var risk_settings = ds~load_dict();
+        
+        save_estate_data(estate_owner, estate_id, now(), inactivity_period, grace_period,
+                         creation_time, estate_value, flags, estate_number, total_rwas, total_claims,
+                         beneficiaries, trading_data, multisig_data, risk_settings);
+    }
+}
+
+;; Get methods
+(int, slice, int, int, int, int, int, int) get_estate_info() method_id {
+    var (owner, estate_id, last_active, inactivity_period, grace_period,
+         creation_time, estate_value, flags, estate_number, _, _) = load_estate_data();
+    
+    var is_locked = flags & 1;
+    var is_claimable = is_estate_claimable(last_active, inactivity_period, grace_period);
+    var trading_enabled = flags & 4;
+    
+    return (estate_number, owner, estate_value, last_active, 
+            inactivity_period, grace_period, is_locked, is_claimable);
+}
+
+(int) get_trading_status() method_id {
+    var (_, _, _, _, _, _, _, flags, _, _, _) = load_estate_data();
+    return flags & 4; ;; Return trading_enabled flag
+}
+
+(cell) get_beneficiaries() method_id {
+    var ds = get_data().begin_parse();
+    ds~skip_bits(2048); ;; Skip estate data
+    return ds~load_dict();
+}

@@ -1,0 +1,26 @@
+{
+  "name": "defai-estate-ton",
+  "version": "1.0.0",
+  "description": "DefAI Estate contracts for TON blockchain",
+  "main": "deploy.ts",
+  "scripts": {
+    "compile": "func -o build/defai-estate.fif -SPA ton/defai-estate.fc && func -o build/defai-treasury.fif -SPA ton/defai-treasury.fc && func -o build/defai-rwa.fif -SPA ton/defai-rwa.fc",
+    "deploy": "ts-node deploy.ts",
+    "test": "jest",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@ton/core": "^0.56.0",
+    "@ton/ton": "^13.11.0",
+    "@ton/crypto": "^3.2.0",
+    "@ton/blueprint": "^0.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0"
+  }
+}

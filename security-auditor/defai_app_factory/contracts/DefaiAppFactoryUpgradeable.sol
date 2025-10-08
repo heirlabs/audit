@@ -420,6 +420,19 @@ contract DefaiAppFactoryUpgradeable is
         return _appIdCounter.current();
     }
 
+    // Override supportsInterface to resolve conflict
+    function supportsInterface(bytes4 interfaceId) 
+        public 
+        view 
+        virtual 
+        override(AccessControlUpgradeable, ERC1155Upgradeable) 
+        returns (bool) 
+    {
+        return 
+            AccessControlUpgradeable.supportsInterface(interfaceId) || 
+            ERC1155Upgradeable.supportsInterface(interfaceId);
+    }
+
     // Required for UUPS
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
 

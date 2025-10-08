@@ -1,0 +1,529 @@
+#pragma version >=0.4.0;
+
+#include "imports/stdlib.fc";
+
+;; ============================================================================
+;; Constants
+;; ============================================================================
+
+const int op::register_app = 0x1;
+const int op::purchase_app = 0x2;
+const int op::toggle_app_status = 0x3;
+const int op::update_app_metadata = 0x4;
+const int op::submit_review = 0x5;
+const int op::update_review = 0x6;
+const int op::refund_purchase = 0x7;
+const int op::update_platform_settings = 0x8;
+const int op::pause = 0x9;
+const int op::unpause = 0xa;
+const int op::batch_purchase = 0xb;
+
+const int MAX_METADATA_URI_LEN = 100;
+const int MAX_REVIEW_CID_LEN = 46;
+const int BASIS_POINTS_DIVISOR = 10000;
+
+const int error::invalid_platform_fee = 101;
+const int error::invalid_price = 102;
+const int error::invalid_max_supply = 103;
+const int error::metadata_uri_too_long = 104;
+const int error::app_not_active = 105;
+const int error::max_supply_reached = 106;
+const int error::unauthorized_creator = 107;
+const int error::invalid_treasury = 108;
+const int error::insufficient_balance = 109;
+const int error::must_own_app_to_review = 110;
+const int error::invalid_rating = 111;
+const int error::comment_cid_too_long = 112;
+const int error::review_already_exists = 113;
+const int error::review_does_not_exist = 114;
+const int error::no_access_to_refund = 115;
+const int error::refund_already_processed = 116;
+const int error::insufficient_creator_balance = 117;
+const int error::app_does_not_exist = 118;
+const int error::already_owns_app = 119;
+const int error::contract_paused = 120;
+const int error::unauthorized = 121;
+
+;; ============================================================================
+;; Storage Layout
+;; ============================================================================
+
+;; Storage:
+;; owner_address: MsgAddress
+;; treasury_address: MsgAddress
+;; defai_jetton_wallet: MsgAddress
+;; platform_fee_bps: uint16
+;; is_paused: uint1
+;; next_app_id: uint32
+;; apps: (HashmapE 32 AppRegistration)
+;; user_access: (HashmapE 256 (HashmapE 32 UserAppAccess))
+;; reviews: (HashmapE 256 (HashmapE 32 AppReview))
+;; refunds: (HashmapE 256 (HashmapE 32 RefundRecord))
+;; app_total_ratings: (HashmapE 32 uint32)
+;; app_review_counts: (HashmapE 32 uint32)
+
+;; AppRegistration:
+;; app_id: uint32
+;; creator: MsgAddress
+;; price: Coins
+;; max_supply: uint32
+;; current_supply: uint32
+;; is_active: uint1
+;; metadata_uri: string
+;; created_at: uint32
+
+;; UserAppAccess:
+;; user: MsgAddress
+;; app_id: uint32
+;; purchased_at: uint32
+;; purchase_price: Coins
+;; has_access: uint1
+
+;; AppReview:
+;; app_id: uint32
+;; reviewer: MsgAddress
+;; rating: uint8
+;; comment_cid: string
+;; timestamp: uint32
+;; exists: uint1
+
+;; RefundRecord:
+;; app_id: uint32
+;; user: MsgAddress
+;; refund_amount: Coins
+;; reason: string
+;; timestamp: uint32
+
+;; ============================================================================
+;; Storage Functions
+;; ============================================================================
+
+() save_data(slice owner, slice treasury, slice jetton_wallet, int platform_fee, int is_paused,
+             int next_app_id, cell apps, cell user_access, cell reviews, cell refunds,
+             cell app_ratings, cell app_review_counts) impure inline {
+    set_data(begin_cell()
+        .store_slice(owner)
+        .store_slice(treasury)
+        .store_slice(jetton_wallet)
+        .store_uint(platform_fee, 16)
+        .store_uint(is_paused, 1)
+        .store_uint(next_app_id, 32)
+        .store_ref(apps)
+        .store_ref(user_access)
+        .store_ref(reviews)
+        .store_ref(refunds)
+        .store_ref(app_ratings)
+        .store_ref(app_review_counts)
+        .end_cell());
+}
+
+(slice, slice, slice, int, int, int, cell, cell, cell, cell, cell, cell) load_data() inline {
+    slice ds = get_data().begin_parse();
+    return (
+        ds~load_msg_addr(),     ;; owner
+        ds~load_msg_addr(),     ;; treasury
+        ds~load_msg_addr(),     ;; jetton_wallet
+        ds~load_uint(16),       ;; platform_fee_bps
+        ds~load_uint(1),        ;; is_paused
+        ds~load_uint(32),       ;; next_app_id
+        ds~load_ref(),          ;; apps
+        ds~load_ref(),          ;; user_access
+        ds~load_ref(),          ;; reviews
+        ds~load_ref(),          ;; refunds
+        ds~load_ref(),          ;; app_ratings
+        ds~load_ref()           ;; app_review_counts
+    );
+}
+
+;; ============================================================================
+;; App Structure Functions
+;; ============================================================================
+
+cell pack_app_registration(int app_id, slice creator, int price, int max_supply, 
+                          int current_supply, int is_active, slice metadata_uri, int created_at) inline {
+    return begin_cell()
+        .store_uint(app_id, 32)
+        .store_slice(creator)
+        .store_coins(price)
+        .store_uint(max_supply, 32)
+        .store_uint(current_supply, 32)
+        .store_uint(is_active, 1)
+        .store_uint(created_at, 32)
+        .store_ref(begin_cell().store_slice(metadata_uri).end_cell())
+        .end_cell();
+}
+
+(int, slice, int, int, int, int, slice, int) unpack_app_registration(cell app) inline {
+    slice cs = app.begin_parse();
+    int app_id = cs~load_uint(32);
+    slice creator = cs~load_msg_addr();
+    int price = cs~load_coins();
+    int max_supply = cs~load_uint(32);
+    int current_supply = cs~load_uint(32);
+    int is_active = cs~load_uint(1);
+    int created_at = cs~load_uint(32);
+    slice metadata_uri = cs~load_ref().begin_parse();
+    return (app_id, creator, price, max_supply, current_supply, is_active, metadata_uri, created_at);
+}
+
+cell pack_user_access(slice user, int app_id, int purchased_at, int purchase_price, int has_access) inline {
+    return begin_cell()
+        .store_slice(user)
+        .store_uint(app_id, 32)
+        .store_uint(purchased_at, 32)
+        .store_coins(purchase_price)
+        .store_uint(has_access, 1)
+        .end_cell();
+}
+
+cell pack_review(int app_id, slice reviewer, int rating, slice comment_cid, int timestamp, int exists) inline {
+    return begin_cell()
+        .store_uint(app_id, 32)
+        .store_slice(reviewer)
+        .store_uint(rating, 8)
+        .store_uint(timestamp, 32)
+        .store_uint(exists, 1)
+        .store_ref(begin_cell().store_slice(comment_cid).end_cell())
+        .end_cell();
+}
+
+cell pack_refund(int app_id, slice user, int refund_amount, slice reason, int timestamp) inline {
+    return begin_cell()
+        .store_uint(app_id, 32)
+        .store_slice(user)
+        .store_coins(refund_amount)
+        .store_uint(timestamp, 32)
+        .store_ref(begin_cell().store_slice(reason).end_cell())
+        .end_cell();
+}
+
+;; ============================================================================
+;; Helper Functions
+;; ============================================================================
+
+int slice_hash(slice s) inline {
+    return string_hash(s);
+}
+
+int user_app_key(slice user, int app_id) inline {
+    return slice_hash(user) ^ app_id;
+}
+
+() send_jetton_transfer(slice to, int amount, slice jetton_wallet, int query_id) impure inline {
+    var msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(jetton_wallet)
+        .store_coins(0)
+        .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_ref(
+            begin_cell()
+                .store_uint(0xf8a7ea5, 32)  ;; op::jetton_transfer
+                .store_uint(query_id, 64)
+                .store_coins(amount)
+                .store_slice(to)
+                .store_slice(to)  ;; response_destination
+                .store_uint(0, 1) ;; no custom payload
+                .store_coins(1)   ;; forward amount
+                .store_uint(0, 1) ;; no forward payload
+            .end_cell()
+        );
+    send_raw_message(msg.end_cell(), 64);
+}
+
+;; ============================================================================
+;; Message Handlers
+;; ============================================================================
+
+() handle_register_app(slice sender, int query_id, slice in_msg_body) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    throw_if(error::contract_paused, is_paused);
+    
+    int price = in_msg_body~load_coins();
+    int max_supply = in_msg_body~load_uint(32);
+    slice metadata_uri = in_msg_body~load_ref().begin_parse();
+    
+    throw_if(error::invalid_price, price == 0);
+    throw_if(error::invalid_max_supply, max_supply == 0);
+    throw_if(error::metadata_uri_too_long, metadata_uri.slice_bits() > MAX_METADATA_URI_LEN * 8);
+    
+    int app_id = next_app_id;
+    cell new_app = pack_app_registration(app_id, sender, price, max_supply, 0, -1, metadata_uri, now());
+    
+    apps~udict_set(32, app_id, new_app.begin_parse());
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, is_paused,
+              next_app_id + 1, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_purchase_app(slice sender, int query_id, slice in_msg_body) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    throw_if(error::contract_paused, is_paused);
+    
+    int app_id = in_msg_body~load_uint(32);
+    int payment_amount = in_msg_body~load_coins();
+    
+    (slice app_data, int found) = apps.udict_get?(32, app_id);
+    throw_unless(error::app_does_not_exist, found);
+    
+    var (_, creator, price, max_supply, current_supply, is_active, _, _) = 
+        unpack_app_registration(begin_cell().store_slice(app_data).end_cell());
+    
+    throw_unless(error::app_not_active, is_active);
+    throw_if(error::max_supply_reached, current_supply >= max_supply);
+    throw_if(error::insufficient_balance, payment_amount < price);
+    
+    ;; Check if user already owns the app
+    int access_key = user_app_key(sender, app_id);
+    (slice user_access_data, int has_access) = user_access.udict_get?(256, access_key);
+    throw_if(error::already_owns_app, has_access);
+    
+    ;; Calculate fees
+    int platform_fee_amount = (price * platform_fee) / BASIS_POINTS_DIVISOR;
+    int creator_amount = price - platform_fee_amount;
+    
+    ;; Send platform fee to treasury
+    send_jetton_transfer(treasury, platform_fee_amount, jetton_wallet, query_id);
+    
+    ;; Send creator amount to creator
+    send_jetton_transfer(creator, creator_amount, jetton_wallet, query_id + 1);
+    
+    ;; Record user access (mint NFT equivalent)
+    cell new_access = pack_user_access(sender, app_id, now(), price, -1);
+    user_access~udict_set(256, access_key, new_access.begin_parse());
+    
+    ;; Update app supply
+    current_supply += 1;
+    cell updated_app = pack_app_registration(app_id, creator, price, max_supply, 
+                                            current_supply, is_active, app_data~load_ref().begin_parse(), 
+                                            app_data~load_uint(32));
+    apps~udict_set(32, app_id, updated_app.begin_parse());
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, is_paused,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_toggle_app_status(slice sender, int query_id, slice in_msg_body) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    int app_id = in_msg_body~load_uint(32);
+    
+    (slice app_data, int found) = apps.udict_get?(32, app_id);
+    throw_unless(error::app_does_not_exist, found);
+    
+    var (_, creator, price, max_supply, current_supply, is_active, metadata_uri, created_at) = 
+        unpack_app_registration(begin_cell().store_slice(app_data).end_cell());
+    
+    throw_unless(error::unauthorized_creator, equal_slices(sender, creator));
+    
+    ;; Toggle status
+    is_active = ~ is_active;
+    
+    cell updated_app = pack_app_registration(app_id, creator, price, max_supply, 
+                                            current_supply, is_active, metadata_uri, created_at);
+    apps~udict_set(32, app_id, updated_app.begin_parse());
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, is_paused,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_submit_review(slice sender, int query_id, slice in_msg_body) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    int app_id = in_msg_body~load_uint(32);
+    int rating = in_msg_body~load_uint(8);
+    slice comment_cid = in_msg_body~load_ref().begin_parse();
+    
+    throw_if(error::invalid_rating, (rating < 1) | (rating > 5));
+    throw_if(error::comment_cid_too_long, comment_cid.slice_bits() > MAX_REVIEW_CID_LEN * 8);
+    
+    ;; Check if user owns the app
+    int access_key = user_app_key(sender, app_id);
+    (_, int has_access) = user_access.udict_get?(256, access_key);
+    throw_unless(error::must_own_app_to_review, has_access);
+    
+    ;; Check if review already exists
+    int review_key = user_app_key(sender, app_id);
+    (_, int review_exists) = reviews.udict_get?(256, review_key);
+    throw_if(error::review_already_exists, review_exists);
+    
+    ;; Add review
+    cell new_review = pack_review(app_id, sender, rating, comment_cid, now(), -1);
+    reviews~udict_set(256, review_key, new_review.begin_parse());
+    
+    ;; Update ratings
+    (slice rating_data, int rating_found) = app_ratings.udict_get?(32, app_id);
+    int total_rating = rating_found ? rating_data~load_uint(32) : 0;
+    total_rating += rating;
+    app_ratings~udict_set(32, app_id, begin_cell().store_uint(total_rating, 32).end_cell().begin_parse());
+    
+    (slice count_data, int count_found) = app_review_counts.udict_get?(32, app_id);
+    int review_count = count_found ? count_data~load_uint(32) : 0;
+    review_count += 1;
+    app_review_counts~udict_set(32, app_id, begin_cell().store_uint(review_count, 32).end_cell().begin_parse());
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, is_paused,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_update_platform_settings(slice sender, int query_id, slice in_msg_body) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    throw_unless(error::unauthorized, equal_slices(sender, owner));
+    
+    int new_platform_fee = in_msg_body~load_uint(16);
+    slice new_treasury = in_msg_body~load_msg_addr();
+    
+    throw_if(error::invalid_platform_fee, new_platform_fee > BASIS_POINTS_DIVISOR);
+    
+    save_data(owner, new_treasury, jetton_wallet, new_platform_fee, is_paused,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_pause(slice sender, int query_id) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    throw_unless(error::unauthorized, equal_slices(sender, owner));
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, -1,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+() handle_unpause(slice sender, int query_id) impure {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         apps, user_access, reviews, refunds, app_ratings, app_review_counts) = load_data();
+    
+    throw_unless(error::unauthorized, equal_slices(sender, owner));
+    
+    save_data(owner, treasury, jetton_wallet, platform_fee, 0,
+              next_app_id, apps, user_access, reviews, refunds,
+              app_ratings, app_review_counts);
+}
+
+;; ============================================================================
+;; Main Entry Point
+;; ============================================================================
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
+    
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    
+    if (flags & 1) { ;; ignore bounced messages
+        return ();
+    }
+    
+    slice sender = cs~load_msg_addr();
+    
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+    
+    if (op == op::register_app) {
+        handle_register_app(sender, query_id, in_msg_body);
+        return ();
+    }
+    
+    if (op == op::purchase_app) {
+        handle_purchase_app(sender, query_id, in_msg_body);
+        return ();
+    }
+    
+    if (op == op::toggle_app_status) {
+        handle_toggle_app_status(sender, query_id, in_msg_body);
+        return ();
+    }
+    
+    if (op == op::submit_review) {
+        handle_submit_review(sender, query_id, in_msg_body);
+        return ();
+    }
+    
+    if (op == op::update_platform_settings) {
+        handle_update_platform_settings(sender, query_id, in_msg_body);
+        return ();
+    }
+    
+    if (op == op::pause) {
+        handle_pause(sender, query_id);
+        return ();
+    }
+    
+    if (op == op::unpause) {
+        handle_unpause(sender, query_id);
+        return ();
+    }
+    
+    throw(0xffff);
+}
+
+;; ============================================================================
+;; Get Methods
+;; ============================================================================
+
+(int, slice, slice, int, int, int) get_contract_data() method_id {
+    var (owner, treasury, jetton_wallet, platform_fee, is_paused, next_app_id,
+         _, _, _, _, _, _) = load_data();
+    return (next_app_id, owner, treasury, platform_fee, is_paused, next_app_id);
+}
+
+(int, slice, int, int, int, int, slice, int) get_app(int app_id) method_id {
+    var (_, _, _, _, _, _, apps, _, _, _, _, _) = load_data();
+    
+    (slice app_data, int found) = apps.udict_get?(32, app_id);
+    throw_unless(error::app_does_not_exist, found);
+    
+    return unpack_app_registration(begin_cell().store_slice(app_data).end_cell());
+}
+
+int get_user_has_access(slice user, int app_id) method_id {
+    var (_, _, _, _, _, _, _, user_access, _, _, _, _) = load_data();
+    
+    int access_key = user_app_key(user, app_id);
+    (_, int has_access) = user_access.udict_get?(256, access_key);
+    
+    return has_access;
+}
+
+int get_app_average_rating(int app_id) method_id {
+    var (_, _, _, _, _, _, _, _, _, _, app_ratings, app_review_counts) = load_data();
+    
+    (slice rating_data, int rating_found) = app_ratings.udict_get?(32, app_id);
+    if (~ rating_found) {
+        return 0;
+    }
+    
+    (slice count_data, int count_found) = app_review_counts.udict_get?(32, app_id);
+    if (~ count_found) {
+        return 0;
+    }
+    
+    int total_rating = rating_data~load_uint(32);
+    int review_count = count_data~load_uint(32);
+    
+    if (review_count == 0) {
+        return 0;
+    }
+    
+    return (total_rating * 100) / review_count;
+}
+
+int get_total_apps() method_id {
+    var (_, _, _, _, _, next_app_id, _, _, _, _, _, _) = load_data();
+    return next_app_id;
+}
