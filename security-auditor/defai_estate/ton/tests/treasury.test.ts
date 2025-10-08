@@ -1,7 +1,8 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Cell, toNano, beginCell, Address } from '@ton/core';
+import { Cell, beginCell, Address } from '@ton/core';
 import { compile } from '@ton/blueprint';
 import '@ton/test-utils';
+import { extendContract, toNano } from './test-helpers';
 
 describe('DefAI Treasury Contract', () => {
     let blockchain: Blockchain;
@@ -47,11 +48,11 @@ describe('DefAI Treasury Contract', () => {
             .storeDict(null) // estate_registry
             .endCell();
 
-        treasuryContract = blockchain.openContract({
+        treasuryContract = extendContract(blockchain.openContract({
             code: treasuryCode,
             data: treasuryData,
             address: deployer.address,
-        });
+        }));
 
         const deployResult = await treasuryContract.sendDeploy(
             deployer.getSender(),
