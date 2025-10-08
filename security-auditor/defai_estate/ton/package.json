@@ -16,6 +16,8 @@
     "@ton/blueprint": "^0.20.0"
   },
   "devDependencies": {
+    "@ton/sandbox": "^0.20.0",
+    "@ton/test-utils": "^0.4.2",
     "@types/node": "^20.0.0",
     "@types/jest": "^29.5.0",
     "typescript": "^5.0.0",

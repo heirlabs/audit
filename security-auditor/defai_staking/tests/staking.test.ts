@@ -1,5 +1,5 @@
 import { Address, beginCell, toNano } from '@ton/core';
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Blockchain } from '@ton/sandbox';
 import '@ton/test-utils';
 
 // Constants matching the FunC implementation
@@ -36,17 +36,10 @@ const OP = {
 
 describe('DeFAI Staking Contract', () => {
     let blockchain: Blockchain;
-    let user1: SandboxContract<TreasuryContract>;
-    let user2: SandboxContract<TreasuryContract>;
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
-        const deployer = await blockchain.treasury('deployer');
-        user1 = await blockchain.treasury('user1');
-        user2 = await blockchain.treasury('user2');
-        
-        // Use deployer for initialization
-        void deployer;
+        void blockchain; // Mark as used
     });
 
     describe('Tier Calculations', () => {
@@ -183,7 +176,7 @@ describe('DeFAI Staking Contract', () => {
 
     describe('Contract Initialization', () => {
         test('should initialize contract with correct parameters', async () => {
-            const jettonWallet = Address.parse('EQD_39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N');
+            const jettonWallet = Address.parse('EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG');
             
             // Build initialization message
             beginCell()
@@ -321,7 +314,7 @@ describe('DeFAI Staking Contract', () => {
             const timelockExpiry = currentTime + ADMIN_TIMELOCK_DURATION * 1000;
             
             const proposalState = {
-                pendingAuthority: user2.address,
+                pendingAuthority: Address.parse('EQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG'),
                 timelockExpiry,
             };
 
