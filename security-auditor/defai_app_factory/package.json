@@ -1,28 +1,16 @@
 {
   "name": "defai-app-factory",
   "version": "1.0.0",
-  "description": "DefAI App Factory - EVM Implementation",
+  "description": "DeFAI App Factory smart contracts",
   "main": "index.js",
   "scripts": {
-    "test": "npx hardhat test",
-    "test:coverage": "npx hardhat coverage",
-    "test:fuzz": "npx hardhat test test/fuzz/*.js",
-    "compile": "npx hardhat compile",
-    "setup-wallet": "node scripts/setup-wallet.js",
-    "deploy:localhost": "npx hardhat run deploy.js --network localhost",
-    "deploy:sepolia": "npx hardhat run deploy.js --network sepolia",
-    "deploy:base-sepolia": "npx hardhat run scripts/deploy-base-sepolia.js --network baseSepolia",
-    "wait-deploy": "node scripts/wait-and-deploy.js",
-    "deploy:mainnet": "npx hardhat run deploy.js --network mainnet"
+    "deploy-all": "hardhat run scripts/deploy-all.js --network base-sepolia",
+    "transfer-funds": "hardhat run scripts/transfer-50-percent.js --network base-sepolia",
+    "compile": "hardhat compile",
+    "clean": "hardhat clean"
   },
-  "keywords": [
-    "defai",
-    "marketplace",
-    "blockchain",
-    "ethereum",
-    "solidity"
-  ],
-  "author": "DefAI Team",
+  "keywords": [],
+  "author": "",
   "license": "MIT",
   "devDependencies": {
     "@nomicfoundation/hardhat-network-helpers": "^1.0.9",
@@ -45,8 +33,5 @@
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.3",
     "dotenv": "^17.2.3"
-  },
-  "directories": {
-    "test": "tests"
   }
 }
