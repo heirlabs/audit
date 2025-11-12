@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+cache/
+.env
+*.json
+!package.json
+!hardhat.config.json
+!tsconfig.json
